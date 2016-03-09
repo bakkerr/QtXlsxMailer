@@ -6,12 +6,21 @@
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QLineEdit>
-#include <QSpinBox>
 #include <QComboBox>
 #include <QLCDNumber>
+#include <QLabel>
 
 #include <smtpclient.h>
 #include <mimetext.h>
+
+#define APPLICATION_VERSION       "0.1"
+#define APPLICATION_NAME          "Qt XLSX Email Generator"
+#define APPLICATION_AUTHOR        "Roy Bakker"
+#define APPLICATION_AUTHOR_EMAIL  "baroy@hr.nl"
+#define APPLICATION_AUTHOR_URL    "www.roybakker.nl"
+#define APPLICATION_COMPANY       "Hogeschool Rotterdam"
+#define APPLICATION_YEAR          "2016"
+#define APPLICATION_URL           "http://github.com/bakkerr/"
 
 namespace Ui {
 class MainWindow;
@@ -30,20 +39,27 @@ private slots:
     void updateInfo();
     void updateText();
     void loadSheet();
+    void generateTextDialog();
 
-    void blockUpdate(bool b);
+    void closeTab(int index);
+
+    void blockRowSignals(bool b);
 
     void sendMails();
     void SMTPconnect();
     void SMTPdisconnect();
 
+    void about();
+
 private:
-    QWidget *createRowSelectWidget();
     QWidget *createGeneralOptionsWidget();
     QWidget *createEditorWidget();
+    QWidget *createRowSelectWidget();
     QWidget *createPreviewWidget();
-    QWidget *createXlsxViewer();
     QWidget *createMiddleWidget();
+    QWidget *createXlsxViewer();
+    QWidget *createInfoBar();
+
 
     QString getMailText(int offset);
     QString getData(QString cell, int offset);
@@ -59,6 +75,10 @@ private:
     QLineEdit *m_senderEmail;
     QLineEdit *m_courseCode;
 
+    QLineEdit *m_SMTPserver;
+    QLineEdit *m_SMTPport;
+    QComboBox *m_SMTPtype;
+
     QTabWidget *m_tabWidget;
 
     QTextEdit *m_edit;
@@ -68,6 +88,8 @@ private:
     QComboBox *m_stop;
     QComboBox *m_preview;
     QLCDNumber *m_nMails;
+
+    QLabel *m_extraText;
 };
 
 #endif // MAINWINDOW_H
