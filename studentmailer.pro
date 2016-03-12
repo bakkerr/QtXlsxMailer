@@ -19,8 +19,6 @@ HEADERS  += mainwindow.h \
     xlsxsheetmodel.h \
     xlsxsheetmodel_p.h
 
-FORMS    += mainwindow.ui
-
 win32:CONFIG(release, debug|release): LIBS += -L$$PWD/../SmtpClient-for-Qt/release/ -lSMTPEmail
 else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/../SmtpClient-for-Qt/debug/ -lSMTPEmail
 else:unix: LIBS += -L$$PWD/../SmtpClient-for-Qt/ -lSMTPEmail
