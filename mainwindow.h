@@ -12,16 +12,20 @@
 #include <QLCDNumber>
 #include <QLabel>
 
+#include <QPropertyAnimation>
+
 #include <smtpclient.h>
 #include <mimetext.h>
 
 /* Compile-time constant values. */
 #define APPLICATION_VERSION       "0.2"
 #define APPLICATION_NAME          "Qt XLSX Email Generator"
+#define APPLICATION_NAME_ABBR     "StudentMailer"
 #define APPLICATION_AUTHOR        "Roy Bakker"
 #define APPLICATION_AUTHOR_EMAIL  "baroy@hr.nl"
 #define APPLICATION_AUTHOR_URL    "www.roybakker.nl"
 #define APPLICATION_COMPANY       "Hogeschool Rotterdam"
+#define APPLICATION_COMPANY_ABBR  "HR"
 #define APPLICATION_YEAR          "2016"
 #define APPLICATION_URL           "http://github.com/bakkerr/"
 
@@ -36,6 +40,12 @@ public:
 
 /* Callback functions. */
 private slots:
+
+    /* Save/load/delete Settings. */
+    void saveSettings();
+    void loadSettings();
+    void deleteSettings();
+
     /* When new sheet is loaded. */
     void updateSheet();
 
@@ -107,7 +117,7 @@ private:
     QDockWidget *m_previewDW;
 
     /* SMTP client */
-    SmtpClient *m_smtp;
+    SmtpClient *m_SMTPConnection;
 
     /* General Options fields */
     QLineEdit *m_emailSubject;
@@ -118,34 +128,37 @@ private:
 
     /* SMTP settings. */
     QWidget *m_SMTPWidget;
-    QPushButton *m_SMTPWidgetHideButton;
+    QPropertyAnimation *m_toggleSMTPAnimation;
+    QPushButton *m_SMTPWidgetToggleButton;
     QLineEdit *m_SMTPserver;
     QLineEdit *m_SMTPport;
     QComboBox *m_SMTPtype;
 
     /* XLSX viewer. */
+    QPushButton *m_loadXlsxFileButton;
     QTabWidget *m_xlsxTab;
 
     /* Editor/Composer. */
     QTabWidget *m_textTab;
     QFrame *m_generateWidget;
-    QPushButton *m_generateButton;
-    QComboBox *m_nameCol;
-    QComboBox *m_finalCol;
-    QComboBox *m_startCol;
-    QComboBox *m_stopCol;
-    QComboBox *m_maxRow;
-    QComboBox *m_headerRow;
+    QPropertyAnimation *m_toggleGenerateAnimation;
+    QPushButton *m_generateWidgetToggleButton;
+    QComboBox *m_nameColSelect;
+    QComboBox *m_finalGradeColSelect;
+    QComboBox *m_startColSelect;
+    QComboBox *m_stopColSelect;
+    QComboBox *m_maxRowSelect;
+    QComboBox *m_headerRowSelect;
 
     /* Selection and Preview. */
-    QTextEdit *m_view;
+    QTextEdit *m_previewText;
     QFrame *m_rowSelectWidget;
-    QComboBox *m_emailColumn;
-    QLineEdit *m_emailAppend;
-    QComboBox *m_start;
-    QComboBox *m_stop;
-    QComboBox *m_preview;
-    QLCDNumber *m_nMails;
+    QComboBox *m_emailColumnSelect;
+    QLineEdit *m_emailAppendText;
+    QComboBox *m_firstRowSelect;
+    QComboBox *m_lastRowSelect;
+    QComboBox *m_previewSelect;
+    QLCDNumber *m_nMailsDisplay;
 
     /* Bottom text */
     QLabel *m_extraText;
