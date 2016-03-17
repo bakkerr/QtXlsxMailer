@@ -26,7 +26,7 @@
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent)
 {
-    this->setWindowTitle(tr("Qt XLSX Email Generator"));
+    this->setWindowTitle(tr("Qt XLSX Email Generator [Hogeschool Rotterdam]"));
 
     m_SMTPConnection = NULL;
 
@@ -34,18 +34,15 @@ MainWindow::MainWindow(QWidget *parent) :
     setDockOptions(QMainWindow::AnimatedDocks);
 
     createGeneralOptionsWidget();
-    this->addDockWidget(Qt::TopDockWidgetArea, m_generalOptionsDW);
-
+    createEditorWidget();
+    createPreviewWidget();
     createXlsxViewerWidget();
+
+    this->addDockWidget(Qt::TopDockWidgetArea, m_generalOptionsDW);
+    this->addDockWidget(Qt::LeftDockWidgetArea, m_editorDW);
+    this->addDockWidget(Qt::RightDockWidgetArea, m_previewDW);
     this->addDockWidget(Qt::BottomDockWidgetArea, m_xlsxViewerDW);
 
-    createEditorWidget();
-    this->addDockWidget(Qt::LeftDockWidgetArea, m_editorDW);
-
-    createPreviewWidget();
-    this->addDockWidget(Qt::RightDockWidgetArea, m_previewDW);
-
-    connect(qApp, SIGNAL(lastWindowClosed()), this, SLOT(saveSettings()));
     loadSettings();
 
     /* Set default values. */
@@ -67,6 +64,7 @@ void MainWindow::createRowSelectWidget(){
     m_rowSelectWidget = new QFrame(this);
     m_rowSelectWidget->setMinimumWidth(150);
     m_rowSelectWidget->setMaximumWidth(150);
+    m_rowSelectWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
 
     QVBoxLayout *rowSelectLayout = new QVBoxLayout(m_rowSelectWidget);
 
@@ -99,7 +97,7 @@ void MainWindow::createRowSelectWidget(){
     rowSelectLayout->addWidget(m_emailColumnSelect);
     rowSelectLayout->addWidget(new QLabel(tr("and append:"), m_rowSelectWidget));
     rowSelectLayout->addWidget(m_emailAppendText);
-    rowSelectLayout->addSpacerItem(new QSpacerItem(5, 5, QSizePolicy::Expanding, QSizePolicy::Expanding));
+    rowSelectLayout->addSpacerItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding));
     rowSelectLayout->addWidget(sendMailsButton);
 
     m_rowSelectWidget->setLayout(rowSelectLayout);
@@ -114,6 +112,7 @@ void MainWindow::createGeneralOptionsWidget(){
     generalOptionsWidget->setMaximumHeight(130);
 
     QGridLayout *generalOptionsLayout = new QGridLayout(generalOptionsWidget);
+    generalOptionsLayout->setContentsMargins(0, 5, 0, 5);
 
     /* Sender name field */
     m_senderName = new QLineEdit(tr(""), generalOptionsWidget);
@@ -155,27 +154,26 @@ void MainWindow::createGeneralOptionsWidget(){
     m_emailBcc->setValidator(new QRegExpValidator(QRegExp("(([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63})[;])*", Qt::CaseInsensitive), m_emailBcc));
     connect(m_emailBcc, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
 
-    /* Clear settings button. */
-    QPushButton *clearSettingsButton = new QPushButton(tr("Clear Settings"), generalOptionsWidget);
-    clearSettingsButton->setToolTip(tr("Reset all saved and edited settings.\nThe application will be as new."));
-    connect(clearSettingsButton, SIGNAL(clicked()), this, SLOT(deleteSettings()));
-
     /* Create the SMTP settings widget. */
     createSMTPWidget();
 
+    createSettingsWidget();
+
     /* Add all fields to the layout. */
-    generalOptionsLayout->addWidget(new QLabel(tr("Sender Name:"), generalOptionsWidget), 0, 0);
-    generalOptionsLayout->addWidget(m_senderName, 0, 1);
-    generalOptionsLayout->addWidget(new QLabel(tr("Sender Email:"), generalOptionsWidget), 1, 0);
-    generalOptionsLayout->addWidget(m_senderEmail, 1, 1);
-    generalOptionsLayout->addWidget(new QLabel(tr("Add Bcc:"), generalOptionsWidget), 2, 0);
-    generalOptionsLayout->addWidget(m_emailBcc, 2, 1);
-    generalOptionsLayout->addWidget(new QLabel(tr("Email Subject:"), generalOptionsWidget), 0, 2);
-    generalOptionsLayout->addWidget(m_emailSubject, 0, 3);
-    generalOptionsLayout->addWidget(new QLabel(tr("Course Code:"), generalOptionsWidget), 1, 2);
-    generalOptionsLayout->addWidget(m_courseCode, 1, 3);
-    generalOptionsLayout->addWidget(clearSettingsButton, 2, 3);
-    generalOptionsLayout->addWidget(m_SMTPWidget, 0, 4, 3, 1);
+    generalOptionsLayout->addWidget(m_settingsWidgetToggleButton, 0, 1, 3, 1);
+    generalOptionsLayout->addWidget(m_settingsWidget, 0, 0, 3, 1);
+    generalOptionsLayout->addWidget(new QLabel(tr("Sender Name:"), generalOptionsWidget), 0, 2);
+    generalOptionsLayout->addWidget(m_senderName, 0, 3);
+    generalOptionsLayout->addWidget(new QLabel(tr("Sender Email:"), generalOptionsWidget), 1, 2);
+    generalOptionsLayout->addWidget(m_senderEmail, 1, 3);
+    generalOptionsLayout->addWidget(new QLabel(tr("Add Bcc:"), generalOptionsWidget), 2, 2);
+    generalOptionsLayout->addWidget(m_emailBcc, 2, 3);
+    generalOptionsLayout->addWidget(new QLabel(tr("Email Subject:"), generalOptionsWidget), 0, 4);
+    generalOptionsLayout->addWidget(m_emailSubject, 0, 5);
+    generalOptionsLayout->addWidget(new QLabel(tr("Course Code:"), generalOptionsWidget), 1, 4);
+    generalOptionsLayout->addWidget(m_courseCode, 1, 5);
+    generalOptionsLayout->addWidget(m_SMTPWidgetToggleButton, 0, 6, 3, 1);
+    generalOptionsLayout->addWidget(m_SMTPWidget, 0, 7, 3, 1);
 
     /* Set layout to mainwidget. */
     generalOptionsWidget->setLayout(generalOptionsLayout);
@@ -185,13 +183,79 @@ void MainWindow::createGeneralOptionsWidget(){
 
 }
 
+void MainWindow::createSettingsWidget(){
+    m_settingsWidget = new QFrame(m_generalOptionsDW);
+
+    QGridLayout *settingsLayout = new QGridLayout(m_settingsWidget);
+
+    m_runtimeValidate = new QCheckBox(tr("Direct Validation"), m_settingsWidget);
+    m_runtimeValidate->setToolTip(tr("Color boxes and buttons red when they have invalid content as you type."));
+    m_runtimeValidate->setChecked(true);
+    connect(m_runtimeValidate, SIGNAL(stateChanged(int)), this, SLOT(updateText()));
+    m_validateHR = new QCheckBox(tr("Validate for HR"), m_settingsWidget);
+    m_validateHR->setToolTip(tr("Validate student email addresses ([7 digits]@hr.nl) and employee code ([5 characters]@hr.nl) for use at the Hogeschool Rotterdam."));
+    m_validateHR->setChecked(true);
+    m_saveOnExitCheckBox = new QCheckBox(tr("Ask to save on exit"), m_settingsWidget);
+    m_saveOnExitCheckBox->setToolTip(tr("Ask before saving text tabs and general parameters on exit. When not checked, these values are automatically saved."));
+    m_saveOnExitCheckBox->setChecked(false);
+
+    m_toggleSettingsAnimation = new QPropertyAnimation(m_settingsWidget, "maximumWidth");
+    m_toggleSettingsAnimation->setDuration(500);
+    m_settingsWidgetToggleButton = new QPushButton(tr("<"), m_generalOptionsDW);
+    m_settingsWidgetToggleButton->setMaximumWidth(20);
+    m_settingsWidgetToggleButton->setMinimumWidth(20);
+    m_settingsWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
+    connect(m_settingsWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleSettingsWidget(bool)));
+    connect(m_toggleSettingsAnimation, SIGNAL(finished()), this, SLOT(repaint()));
+    m_settingsWidgetToggleButton->setCheckable(true);
+    m_settingsWidgetToggleButton->setChecked(true);
+    m_settingsWidgetToggleButton->setChecked(false);
+
+    /* Clear settings button. */
+    QPushButton *clearSettingsButton = new QPushButton(tr("Clear Saved Settings"), m_settingsWidget);
+    clearSettingsButton->setToolTip(tr("Reset all saved and edited settings.\nThe application will be as new."));
+    connect(clearSettingsButton, SIGNAL(clicked()), this, SLOT(deleteSettings()));
+
+    /* Save settings button. */
+    QPushButton *saveSettingsButton = new QPushButton(tr("Save Settings"), m_settingsWidget);
+    saveSettingsButton->setToolTip(tr("Reset all saved and edited settings.\nThe application will be as new."));
+    connect(saveSettingsButton, SIGNAL(clicked()), this, SLOT(saveSettings()));
+
+    settingsLayout->addWidget(saveSettingsButton, 0, 1);
+    settingsLayout->addWidget(clearSettingsButton, 1, 1);
+    settingsLayout->addWidget(m_runtimeValidate, 0, 2);
+    settingsLayout->addWidget(m_validateHR, 1, 2);
+    settingsLayout->addWidget(m_saveOnExitCheckBox, 2, 2);
+
+}
+
+void MainWindow::toggleSettingsWidget(bool s){
+
+    if(!s){
+        /* Hide */
+        m_toggleSettingsAnimation->setStartValue(400);
+        m_toggleSettingsAnimation->setEndValue(0);
+        m_settingsWidgetToggleButton->setText(tr(">"));
+        m_settingsWidgetToggleButton->setToolTip(tr("Show settings"));
+    }
+    else{
+        /* Show. */
+        m_toggleSettingsAnimation->setStartValue(0);
+        m_toggleSettingsAnimation->setEndValue(400);
+        m_settingsWidgetToggleButton->setText(tr("<"));
+        m_settingsWidgetToggleButton->setToolTip(tr("Hide settings"));
+    }
+
+    m_toggleSettingsAnimation->start();
+
+}
+
 /* Creates the SMTP settings widget */
 void MainWindow::createSMTPWidget(){
 
-    m_SMTPWidget = new QWidget(m_generalOptionsDW);
+    m_SMTPWidget = new QFrame(m_generalOptionsDW);
 
     QGridLayout *smtpSettingsLayout = new QGridLayout(m_SMTPWidget);
-    smtpSettingsLayout->setContentsMargins(0,0,0,0);
 
     m_SMTPserver = new QLineEdit(tr(""), m_SMTPWidget);
 
@@ -214,6 +278,7 @@ void MainWindow::createSMTPWidget(){
     m_SMTPWidgetToggleButton->setMinimumWidth(20);
     m_SMTPWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
     connect(m_SMTPWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleSMTPWidget(bool)));
+    connect(m_toggleSMTPAnimation, SIGNAL(finished()), this, SLOT(repaint()));
     m_SMTPWidgetToggleButton->setCheckable(true);
     m_SMTPWidgetToggleButton->setChecked(true);
     m_SMTPWidgetToggleButton->setChecked(false);
@@ -224,7 +289,6 @@ void MainWindow::createSMTPWidget(){
     smtpSettingsLayout->addWidget(m_SMTPport, 1, 2);
     smtpSettingsLayout->addWidget(m_SMTPtype, 2, 1);
     smtpSettingsLayout->addWidget(SMTPConnectButton, 2, 2);
-    smtpSettingsLayout->addWidget(m_SMTPWidgetToggleButton, 0, 0, 3, 1);
 
     m_SMTPWidget->setLayout(smtpSettingsLayout);
 
@@ -235,13 +299,13 @@ void MainWindow::toggleSMTPWidget(bool s){
     if(!s){
         /* Hide */
         m_toggleSMTPAnimation->setStartValue(400);
-        m_toggleSMTPAnimation->setEndValue(20);
+        m_toggleSMTPAnimation->setEndValue(0);
         m_SMTPWidgetToggleButton->setText(tr("<"));
         m_SMTPWidgetToggleButton->setToolTip(tr("Show SMTP options"));
     }
     else{
         /* Show. */
-        m_toggleSMTPAnimation->setStartValue(20);
+        m_toggleSMTPAnimation->setStartValue(0);
         m_toggleSMTPAnimation->setEndValue(400);
         m_SMTPWidgetToggleButton->setText(tr(">"));
         m_SMTPWidgetToggleButton->setToolTip(tr("Hide SMTP options"));
@@ -263,11 +327,10 @@ void MainWindow::createEditorWidget(){
 
     /* Create Layout. */
     QHBoxLayout *editorWidgetLayout = new QHBoxLayout(editorWidget);
-    editorWidgetLayout->setContentsMargins(2,2,2,2);
 
     /* Create tabwidget to contain editors. */
     m_textTab = new QTabWidget(editorWidget);
-    m_textTab->setTabPosition(QTabWidget::South);
+    //m_textTab->setTabPosition(QTabWidget::South);
     m_textTab->setTabsClosable(true);
 
     /* Button to add new tab. */
@@ -289,6 +352,7 @@ void MainWindow::createEditorWidget(){
 
     /* Add widgets to layout */
     editorWidgetLayout->addWidget(m_textTab);
+    editorWidgetLayout->addWidget(m_generateWidgetToggleButton);
     editorWidgetLayout->addWidget(m_generateWidget);
 
     /* Set layout to main widget. */
@@ -306,7 +370,6 @@ void MainWindow::createGenerateWidget(){
 
     /* Create Layout. */
     QGridLayout *generateWidgetLayout = new QGridLayout(m_generateWidget);
-    generateWidgetLayout->setContentsMargins(0,0,0,0);
 
     /* Create Widgets */
     m_nameColSelect = new QComboBox(m_generateWidget);
@@ -375,9 +438,8 @@ void MainWindow::createGenerateWidget(){
     generateWidgetLayout->addWidget(m_maxRowSelect, 6, 2);
     generateWidgetLayout->addWidget(newButton, 9, 1);
     generateWidgetLayout->addWidget(replaceButton, 9, 2);
-
     /* Add the show/hide button. */
-    generateWidgetLayout->addWidget(m_generateWidgetToggleButton, 0, 0, 10, 1);
+    //generateWidgetLayout->addWidget(m_generateWidgetToggleButton, 0, 0, 10, 1);
 
     /* Set layout to main widget. */
     m_generateWidget->setLayout(generateWidgetLayout);
@@ -389,13 +451,13 @@ void MainWindow::toggleGenerateWidget(bool s){
     if(!s){
         /* Hide. */
         m_toggleGenerateAnimation->setStartValue(400);
-        m_toggleGenerateAnimation->setEndValue(20);
+        m_toggleGenerateAnimation->setEndValue(0);
         m_generateWidgetToggleButton->setText(tr("<"));
         m_generateWidgetToggleButton->setToolTip(tr("Show options"));
     }
     else{
         /* Show. */
-        m_toggleGenerateAnimation->setStartValue(20);
+        m_toggleGenerateAnimation->setStartValue(0);
         m_toggleGenerateAnimation->setEndValue(400);
         m_generateWidgetToggleButton->setText(tr(">"));
         m_generateWidgetToggleButton->setToolTip(tr("Hide options"));
@@ -411,16 +473,15 @@ void MainWindow::createPreviewWidget(){
 
     /* Create the dockwidget. */
     m_previewDW = new QDockWidget(tr("Selection and preview:"), this);
+    m_previewDW->setMinimumHeight(350);
 
     /* Create a (main)frame for this widget. */
     QFrame *previewWidget = new QFrame(this);
     previewWidget->setFrameShape(QFrame::StyledPanel);
-    previewWidget->setMinimumHeight(350);
 
     /* Create main layout. */
     QHBoxLayout *previewWidgetLayout = new QHBoxLayout();
     previewWidgetLayout->setAlignment(Qt::AlignTop);
-    previewWidgetLayout->setContentsMargins(2,2,2,2);
 
     /* Create layouts. */
     QVBoxLayout *previewBoxLayout = new QVBoxLayout();
@@ -477,7 +538,7 @@ void MainWindow::createXlsxViewerWidget(){
 
     /* Create a frame for this widget that uses all of the available (remaining) space. */
     QFrame *xlsxWidget = new QFrame(this);
-    xlsxWidget->setMinimumHeight(150);
+    xlsxWidget->setMinimumHeight(200);
     xlsxWidget->setMinimumWidth(400);
     xlsxWidget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
 
@@ -569,7 +630,8 @@ void MainWindow::loadSheet(){
             }
 
             /* Add sheet as a tab to viewer. */
-            m_xlsxTab->addTab(view, sheetName);
+            int tabIndex = m_xlsxTab->addTab(view, sheetName);
+            m_xlsxTab->setCurrentIndex(tabIndex);
         }
     }
 }
@@ -731,30 +793,45 @@ void MainWindow::updateInfo(){
 /* Update and parse values. */
 void MainWindow::updateText(){
 
-    /* Check option fields and make red when useless. */
-    !isValidEmail(m_senderEmail->text()) ? m_senderEmail->setStyleSheet(tr("background-color: #FF9999;")) :
-                                           m_senderEmail->setStyleSheet(tr(""));
-
-    m_emailSubject->text().length() < 3  ? m_emailSubject->setStyleSheet(tr("background-color: #FF9999;")) :
-                                           m_emailSubject->setStyleSheet(tr(""));
-
-    m_courseCode->text().length() < 3    ? m_courseCode->setStyleSheet(tr("background-color: #FF9999;")) :
-                                           m_courseCode->setStyleSheet(tr(""));
-
-    m_xlsxTab->count() < 1               ? m_loadXlsxFileButton->setStyleSheet(tr("background-color: #FF9999;")) :
-                                           m_loadXlsxFileButton->setStyleSheet(tr(""));
-
     QStringList bcc_addresses = m_emailBcc->text().split(";");
-    foreach(QString bcc, bcc_addresses){
-        !bcc.isEmpty() && !isValidEmail(bcc) ? m_emailBcc->setStyleSheet(tr("background-color: #FF9999;")) :
-                                               m_emailBcc->setStyleSheet(tr(""));
-    }
 
     /* Generate preview text. */
     QString res;
 
     /* Get the mail number. */
     int offset = m_previewSelect->currentText().toInt();
+
+    if(m_runtimeValidate->isChecked()){
+        /* Check option fields and make red when useless. */
+        !isValidEmail(m_senderEmail->text()) ? m_senderEmail->setStyleSheet(tr("background-color: #FF9999;")) :
+                                               m_senderEmail->setStyleSheet(tr(""));
+
+        if(m_validateHR->isChecked()){
+            !isValidHREmployeeEmail(m_senderEmail->text()) ? m_senderEmail->setStyleSheet(tr("background-color: #FF9999;")) :
+                                                            m_senderEmail->setStyleSheet(tr(""));
+        }
+
+        m_emailSubject->text().length() < 3  ? m_emailSubject->setStyleSheet(tr("background-color: #FF9999;")) :
+                                               m_emailSubject->setStyleSheet(tr(""));
+
+        m_courseCode->text().length() < 3    ? m_courseCode->setStyleSheet(tr("background-color: #FF9999;")) :
+                                               m_courseCode->setStyleSheet(tr(""));
+
+        m_xlsxTab->count() < 1               ? m_loadXlsxFileButton->setStyleSheet(tr("background-color: #FF9999;")) :
+                                               m_loadXlsxFileButton->setStyleSheet(tr(""));
+
+        foreach(QString bcc, bcc_addresses){
+            !bcc.isEmpty() && !isValidEmail(bcc) ? m_emailBcc->setStyleSheet(tr("background-color: #FF9999;")) :
+                                                   m_emailBcc->setStyleSheet(tr(""));
+        }
+    }
+    else{
+        m_senderEmail->setStyleSheet(tr(""));
+        m_emailSubject->setStyleSheet(tr(""));
+        m_courseCode->setStyleSheet(tr(""));
+        m_loadXlsxFileButton->setStyleSheet(tr(""));
+        m_emailBcc->setStyleSheet(tr(""));
+    }
 
     /* Extract default fields. */
     res += tr("From: ") + m_senderName->text() + tr(" <") + m_senderEmail->text() +  tr(">\n");
@@ -920,6 +997,12 @@ void MainWindow::sendMails(){
             QMessageBox::warning(this, tr("Error:"), tr("The email address ") + recv_mail + tr(" on line ") + QString::number(i) + tr(" is invalid!"));
             m_emailColumnSelect->setFocus();
             return;
+        }
+        if(m_validateHR->isChecked()){
+            if(!isValidHRStudentEmail(recv_mail)){
+                QMessageBox::warning(this, tr("Error:"), tr("The email address ") + recv_mail + tr(" on line ") + QString::number(i) + tr(" is not a valid HR student email address!"));
+                return;
+            }
         }
 
         /* Mailtext OK? */
@@ -1163,10 +1246,8 @@ void MainWindow::addNewTextTab(){
         if((te = qobject_cast<QTextEdit*>(m_textTab->widget(i)))){
             QRegExp re("[T](\\d+)");
             QString name = m_textTab->tabText(i);
-            qDebug() << name << "..." << endl;
             if(re.exactMatch(name)){
                 int oldNum = re.cap(1).toInt();
-                qDebug() << "match " << name << re.cap(0) << re.cap(1) << oldNum << endl;
                 if(oldNum >= newNum){
                     newNum = oldNum + 1;
                 }
@@ -1286,9 +1367,21 @@ bool MainWindow::isValidEmail(QString address){
     return QRegExp("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63}", Qt::CaseInsensitive).exactMatch(address);
 }
 
+bool MainWindow::isValidHRStudentEmail(QString address){
+    return QRegExp("\\d{7}@hr.nl", Qt::CaseInsensitive).exactMatch(address);
+}
+
+bool MainWindow::isValidHREmployeeEmail(QString address){
+    return QRegExp("[a-z]{5}@hr.nl", Qt::CaseInsensitive).exactMatch(address);
+}
+
 void MainWindow::saveSettings(){
 
-    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR) + tr(APPLICATION_VERSION), this);
+    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
+
+    s->setValue(tr("saveOnExit"), m_saveOnExitCheckBox->isChecked());
+    s->setValue(tr("validateHR"), m_validateHR->isChecked());
+    s->setValue(tr("runtimeValidate"), m_runtimeValidate->isChecked());
 
     s->setValue(tr("senderName"), m_senderName->text());
     s->setValue(tr("senderEmail"), m_senderEmail->text());
@@ -1315,12 +1408,15 @@ void MainWindow::saveSettings(){
     s->endArray();
 
     s->sync();
-
 }
 
 void MainWindow::loadSettings(){
 
-    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR) + tr(APPLICATION_VERSION), this);
+    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
+
+    m_saveOnExitCheckBox->setChecked(s->value(tr("saveOnExit"), QVariant(false)).toBool());
+    m_validateHR->setChecked(s->value(tr("validateHR"), QVariant(true)).toBool());
+    m_runtimeValidate->setChecked(s->value(tr("runtimeValidate"), QVariant(true)).toBool());
 
     m_senderName->setText(s->value(tr("senderName"), tr("")).toString());
     m_senderEmail->setText(s->value(tr("senderEmail"), tr("")).toString());
@@ -1346,13 +1442,11 @@ void MainWindow::loadSettings(){
     }
     s->endArray();
 
-
-
 }
 
 void MainWindow::deleteSettings(){
 
-    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR) + tr(APPLICATION_VERSION), this);
+    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
 
     /* Sure? */
     if(QMessageBox::question(this, tr("Delete all settings?"),
@@ -1420,4 +1514,27 @@ void MainWindow::about(){
 #endif
 
                         );
+}
+
+void MainWindow::closeEvent(QCloseEvent *closeEvent){
+
+    if(m_saveOnExitCheckBox->isChecked()){
+        QMessageBox::StandardButton answer = QMessageBox::question(this,
+                                                                   tr("Save settings?"),
+                                                                   tr("Do you want to save your email texts and general parameters?\n"),
+                                                                   QMessageBox::Cancel | QMessageBox::No | QMessageBox::Yes,
+                                                                   QMessageBox::Cancel);
+        if(answer == QMessageBox::Cancel){
+            closeEvent->ignore();
+            return;
+        }
+        if(answer == QMessageBox::No){
+            closeEvent->accept();
+            return;
+        }
+    }
+
+    saveSettings();
+    closeEvent->accept();
+
 }

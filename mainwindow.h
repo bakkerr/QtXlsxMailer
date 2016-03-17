@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QLCDNumber>
 #include <QLabel>
+#include <QCheckBox>
 
 #include <QPropertyAnimation>
 
@@ -45,6 +46,7 @@ private slots:
     void saveSettings();
     void loadSettings();
     void deleteSettings();
+    void toggleSettingsWidget(bool b);
 
     /* When new sheet is loaded. */
     void updateSheet();
@@ -83,9 +85,12 @@ private slots:
     /* Show about dialog. */
     void about();
 
+    void closeEvent(QCloseEvent *closeEvent);
+
 private:
     /* (Dock)widget generators. */
     void createGeneralOptionsWidget();
+    void createSettingsWidget();
     void createSMTPWidget();
 
     void createEditorWidget();
@@ -100,6 +105,8 @@ private:
 
     /* Valid email address? */
     bool isValidEmail(QString address);
+    bool isValidHRStudentEmail(QString address);
+    bool isValidHREmployeeEmail(QString address);
 
     /* Generate mailtext from template */
     QString getMailText(int offset);
@@ -126,8 +133,16 @@ private:
     QLineEdit *m_senderEmail;
     QLineEdit *m_courseCode;
 
+    /* Settings settings. */
+    QFrame *m_settingsWidget;
+    QPropertyAnimation *m_toggleSettingsAnimation;
+    QPushButton *m_settingsWidgetToggleButton;
+    QCheckBox *m_runtimeValidate;
+    QCheckBox *m_saveOnExitCheckBox;
+    QCheckBox *m_validateHR;
+
     /* SMTP settings. */
-    QWidget *m_SMTPWidget;
+    QFrame *m_SMTPWidget;
     QPropertyAnimation *m_toggleSMTPAnimation;
     QPushButton *m_SMTPWidgetToggleButton;
     QLineEdit *m_SMTPserver;
