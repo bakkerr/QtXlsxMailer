@@ -9,7 +9,6 @@
 #include <QVBoxLayout>
 #include <QGridLayout>
 
-#include <QProgressDialog>
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
@@ -52,6 +51,11 @@ MainWindow::MainWindow(QWidget *parent) :
     this->addDockWidget(Qt::BottomDockWidgetArea, m_xlsxViewerDW);
     this->addToolBar(Qt::BottomToolBarArea, m_toolBar);
 
+    /* Having no central widget gives problems in layout. */
+    QWidget *cw = new QWidget(this);
+    cw->setFixedSize(0, 0);
+    setCentralWidget(cw);
+
     /* Set default values. */
     loadSettings();
     updateSheet();
@@ -67,7 +71,425 @@ MainWindow::~MainWindow(){
 
 }
 
-void MainWindow::createRowSelectWidget(){
+/*
+ * [1] UI generators.
+ */
+
+/* General Options Dockwidget */
+void MainWindow::createGeneralOptionsWidget(){
+
+    m_generalOptionsDW = new QDockWidget(tr("General parameters"), this);
+    m_generalOptionsDW->setFixedHeight(175);
+
+    QFrame *generalOptionsWidget = new QFrame(m_generalOptionsDW);
+    generalOptionsWidget->setFrameShape(QFrame::StyledPanel);
+
+    QGridLayout *generalOptionsLayout = new QGridLayout(generalOptionsWidget);
+    QMargins m = generalOptionsLayout->contentsMargins();
+    m.setLeft(0);
+    m.setRight(0);
+    generalOptionsLayout->setContentsMargins(m);
+
+    /* Sender name field */
+    m_senderName = new QLineEdit(tr(""), generalOptionsWidget);
+    m_senderName->setToolTip(tr("This field contains the name of the\n"
+                                "sender of the emails. It will also be\n"
+                                "used in the automatic generation of\n"
+                                "the email text.\n\n"
+                                "Example: \"D. Ocent\" or \"Do Cent\""));
+    connect(m_senderName, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
+
+    /* Sender email address field. */
+    m_senderEmail = new QLineEdit(tr(""), generalOptionsWidget);
+    m_senderEmail->setToolTip(tr("This field will be used as the sender\n"
+                                 "email address of the mails that are sent.\n"
+                                 "It will also be used in the SMTP connection\n"
+                                 "as the SMTP username.\n\n"
+                                 "Example: \"docentcode@hr.nl\""));
+    m_senderEmail->setValidator(new QRegExpValidator(QRegExp("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63}", Qt::CaseInsensitive), m_senderEmail));
+    connect(m_senderEmail, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
+
+    /* Email subject field. */
+    m_emailSubject = new QLineEdit(tr(""), generalOptionsWidget);
+    m_emailSubject->setToolTip(tr("Add the subject of the generated emails here.\n\n"
+                                  "Example: \"Cijfers Tentamen\""));
+    connect(m_emailSubject, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
+    m_courseCode = new QLineEdit(tr(""), generalOptionsWidget);
+    m_courseCode->setToolTip(tr("Add the coursecode here.\n"
+                                "It will be added as a [tag] to the\n"
+                                "subject of the generated emails.\n\n"
+                                "Example: \"ELEVAK01\""));
+    connect(m_courseCode, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
+
+    /* Email bcc field. */
+    m_emailBcc = new QLineEdit(tr(""), generalOptionsWidget);
+    m_emailBcc->setToolTip(tr("Send a (blind) copy of every email to this address.\n"
+                              "Multiple addresses may be added seperated by a ';' and\n"
+                              "no spaces.\n\n"
+                              "Example \"collegue@hr.nl;other@extern.com\""));
+    m_emailBcc->setValidator(new QRegExpValidator(QRegExp("(([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63})[;])*", Qt::CaseInsensitive), m_emailBcc));
+    connect(m_emailBcc, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
+
+    /* Email bcc field. */
+    m_reportCC = new QLineEdit(tr(""), generalOptionsWidget);
+    m_reportCC->setToolTip(tr("Send a copy of the report to this address.\n"
+                              "Multiple addresses may be added seperated by a ';' and\n"
+                              "no spaces.\n\n"
+                              "Example \"collegue@hr.nl;other@extern.com\""));
+    m_reportCC->setValidator(new QRegExpValidator(QRegExp("(([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63})[;])*", Qt::CaseInsensitive), m_reportCC));
+    connect(m_reportCC, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
+
+    m_attachments = new QComboBox(generalOptionsWidget);
+    m_attachments->setToolTip(tr("These attachments will be added to all emails."));
+    connect(m_attachments, SIGNAL(activated(int)), this, SLOT(updateText()));
+
+    m_addAttachment = new QPushButton(tr("+"), generalOptionsWidget);
+    m_addAttachment->setToolTip(tr("Add attachment."));
+    m_addAttachment->setMaximumWidth(30);
+    connect(m_addAttachment, SIGNAL(clicked()), this, SLOT(addAttachment()));
+
+    m_deleteSelectedAttachment = new QPushButton(tr("-"), generalOptionsWidget);
+    m_deleteSelectedAttachment->setToolTip(tr("Delete selected attachment."));
+    m_deleteSelectedAttachment->setMaximumWidth(30);
+    connect(m_deleteSelectedAttachment, SIGNAL(clicked()), this, SLOT(deleteAttachment()));
+
+    QHBoxLayout *attachmentLayout = new QHBoxLayout();
+    attachmentLayout->addWidget(m_attachments);
+    attachmentLayout->addWidget(m_deleteSelectedAttachment);
+    attachmentLayout->addWidget(m_addAttachment);
+
+    /* Create the SMTP settings widget. */
+    createSMTPWidget();
+
+    createSettingsWidget();
+
+    /* Add all fields to the layout. */
+    generalOptionsLayout->addWidget(m_settingsWidgetToggleButton, 0, 1, 4, 1);
+    generalOptionsLayout->addWidget(m_settingsWidget, 0, 0, 4, 1);
+    generalOptionsLayout->addWidget(new QLabel(tr("Sender Name:"), generalOptionsWidget), 0, 2);
+    generalOptionsLayout->addWidget(m_senderName, 0, 3);
+    generalOptionsLayout->addWidget(new QLabel(tr("Sender Email:"), generalOptionsWidget), 1, 2);
+    generalOptionsLayout->addWidget(m_senderEmail, 1, 3);
+    generalOptionsLayout->addWidget(new QLabel(tr("Add BCC:"), generalOptionsWidget), 2, 2);
+    generalOptionsLayout->addWidget(m_emailBcc, 2, 3);
+    generalOptionsLayout->addWidget(new QLabel(tr("Report CC:"), generalOptionsWidget), 3, 2);
+    generalOptionsLayout->addWidget(m_reportCC, 3, 3);
+    generalOptionsLayout->addWidget(new QLabel(tr("Email Subject:"), generalOptionsWidget), 0, 4);
+    generalOptionsLayout->addWidget(m_emailSubject, 0, 5);
+    generalOptionsLayout->addWidget(new QLabel(tr("Course Code:"), generalOptionsWidget), 1, 4);
+    generalOptionsLayout->addWidget(m_courseCode, 1, 5);
+    generalOptionsLayout->addWidget(new QLabel(tr("Attachments:"), generalOptionsWidget), 2, 4);
+    generalOptionsLayout->addLayout(attachmentLayout, 2, 5);
+    generalOptionsLayout->addWidget(m_SMTPWidgetToggleButton, 0, 6, 4, 1);
+    generalOptionsLayout->addWidget(m_SMTPWidget, 0, 7, 4, 1);
+
+    /* Set layout to mainwidget. */
+    generalOptionsWidget->setLayout(generalOptionsLayout);
+
+    /* Set mainwidget on DockWidget. */
+    m_generalOptionsDW->setWidget(generalOptionsWidget);
+
+}
+
+/* Settings Widget (can hide). */
+void MainWindow::createSettingsWidget(){
+    m_settingsWidget = new QFrame(m_generalOptionsDW);
+
+    QGridLayout *settingsLayout = new QGridLayout(m_settingsWidget);
+    QMargins m = settingsLayout->contentsMargins();
+    m.setTop(0);
+    m.setBottom(0);
+    m.setRight(0);
+    settingsLayout->setContentsMargins(m);
+
+    m_runtimeValidate = new QCheckBox(tr("Direct Validation"), m_settingsWidget);
+    m_runtimeValidate->setToolTip(tr("Color boxes and buttons red when they have invalid content as you type."));
+    m_runtimeValidate->setChecked(true);
+    connect(m_runtimeValidate, SIGNAL(stateChanged(int)), this, SLOT(updateText()));
+    m_validateHR = new QCheckBox(tr("Validate for HR"), m_settingsWidget);
+    m_validateHR->setToolTip(tr("Validate student email addresses ([7 digits]@hr.nl) and employee code ([5 characters]@hr.nl) for use at the Hogeschool Rotterdam."));
+    m_validateHR->setChecked(true);
+    m_saveOnExitCheckBox = new QCheckBox(tr("Ask to save on exit"), m_settingsWidget);
+    m_saveOnExitCheckBox->setToolTip(tr("Ask before saving text tabs and general parameters on exit. When not checked, these values are automatically saved."));
+    m_saveOnExitCheckBox->setChecked(false);
+
+    m_toggleSettingsAnimation = new QPropertyAnimation(m_settingsWidget, "maximumWidth");
+    m_toggleSettingsAnimation->setDuration(500);
+    m_settingsWidgetToggleButton = new QPushButton(tr("<"), m_generalOptionsDW);
+    m_settingsWidgetToggleButton->setMaximumWidth(20);
+    m_settingsWidgetToggleButton->setMinimumWidth(20);
+    m_settingsWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
+    connect(m_settingsWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleSettingsWidget(bool)));
+    connect(m_toggleSettingsAnimation, SIGNAL(finished()), this, SLOT(repaint()));
+    m_settingsWidgetToggleButton->setCheckable(true);
+    m_settingsWidgetToggleButton->setChecked(true);
+    m_settingsWidgetToggleButton->setChecked(false);
+
+    /* Clear settings button. */
+    QPushButton *clearSettingsButton = new QPushButton(tr("Clear Saved Settings"), m_settingsWidget);
+    clearSettingsButton->setToolTip(tr("Reset all saved and edited settings.\nThe application will be as new."));
+    connect(clearSettingsButton, SIGNAL(clicked()), this, SLOT(deleteSettings()));
+
+    /* Save settings button. */
+    QPushButton *saveSettingsButton = new QPushButton(tr("Save Settings"), m_settingsWidget);
+    saveSettingsButton->setToolTip(tr("Save settings now."));
+    connect(saveSettingsButton, SIGNAL(clicked()), this, SLOT(saveSettings()));
+
+    /* Set Layout. */
+    settingsLayout->addWidget(saveSettingsButton, 0, 1);
+    settingsLayout->addWidget(clearSettingsButton, 1, 1);
+    settingsLayout->addWidget(m_runtimeValidate, 0, 2);
+    settingsLayout->addWidget(m_validateHR, 1, 2);
+    settingsLayout->addWidget(m_saveOnExitCheckBox, 2, 2);
+
+}
+
+/* Creates the SMTP settings widget (can hide). */
+void MainWindow::createSMTPWidget(){
+
+    m_SMTPWidget = new QFrame(m_generalOptionsDW);
+
+    QGridLayout *smtpSettingsLayout = new QGridLayout(m_SMTPWidget);
+    QMargins m = smtpSettingsLayout->contentsMargins();
+    m.setBottom(0);
+    m.setTop(0);
+    m.setLeft(0);
+    smtpSettingsLayout->setContentsMargins(m);
+
+    m_SMTPserver = new QLineEdit(tr(""), m_SMTPWidget);
+
+    m_SMTPport = new QLineEdit(tr(""), m_SMTPWidget);
+    m_SMTPport->setValidator(new QIntValidator(1, 65535, m_SMTPport));
+
+    m_SMTPtype = new QComboBox(m_SMTPWidget);
+    m_SMTPtype->addItem(tr("SSL"), SmtpClient::SslConnection);
+    m_SMTPtype->addItem(tr("TLS"), SmtpClient::TlsConnection);
+    m_SMTPtype->addItem(tr("TCP"), SmtpClient::TcpConnection);
+
+    QPushButton *SMTPConnectButton = new QPushButton(tr("SMTP Connect"), m_SMTPWidget);
+    SMTPConnectButton->setToolTip(tr("Connect to the SMTP server now."));
+    connect(SMTPConnectButton, SIGNAL(clicked()), this, SLOT(SMTPconnect()));
+
+    m_toggleSMTPAnimation = new QPropertyAnimation(m_SMTPWidget, "maximumWidth");
+    m_toggleSMTPAnimation->setDuration(500);
+    m_SMTPWidgetToggleButton = new QPushButton(tr("<"), m_generalOptionsDW);
+    m_SMTPWidgetToggleButton->setMaximumWidth(20);
+    m_SMTPWidgetToggleButton->setMinimumWidth(20);
+    m_SMTPWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
+    connect(m_SMTPWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleSMTPWidget(bool)));
+    connect(m_toggleSMTPAnimation, SIGNAL(finished()), this, SLOT(repaint()));
+    m_SMTPWidgetToggleButton->setCheckable(true);
+    m_SMTPWidgetToggleButton->setChecked(true);
+    m_SMTPWidgetToggleButton->setChecked(false);
+
+    smtpSettingsLayout->addWidget(new QLabel(tr("SMTP server:"), m_SMTPWidget), 0, 1);
+    smtpSettingsLayout->addWidget(m_SMTPserver, 0, 2);
+    smtpSettingsLayout->addWidget(new QLabel(tr("SMTP port:"), m_SMTPWidget), 1, 1);
+    smtpSettingsLayout->addWidget(m_SMTPport, 1, 2);
+    smtpSettingsLayout->addWidget(m_SMTPtype, 2, 1);
+    smtpSettingsLayout->addWidget(SMTPConnectButton, 2, 2);
+
+    m_SMTPWidget->setLayout(smtpSettingsLayout);
+
+}
+
+/* Create Editor Dockwidget */
+void MainWindow::createEditorWidget(){
+
+    /* Create Dockwidget for the editor. */
+    m_editorDW = new QDockWidget(tr("Edit:"), this);
+    m_editorDW->setMinimumHeight(375);
+
+    /* Create main widget. */
+    QFrame *editorWidget = new QFrame(m_editorDW);
+    editorWidget->setFrameShape(QFrame::StyledPanel);
+
+    /* Create Layout. */
+    QHBoxLayout *editorWidgetLayout = new QHBoxLayout(editorWidget);
+
+    /* Create tabwidget to contain editors. */
+    m_textTab = new QTabWidget(editorWidget);
+    m_textTab->setToolTip(tr("The selected tab will be used to\n"
+                             "generate the e-mails from.\n\n"
+                             "Double-click to rename tab."));
+    m_textTab->setTabsClosable(true);
+
+    /* Button to add new tab. */
+    QToolButton *addTabButton = new QToolButton(m_textTab);
+    addTabButton->setText(tr("+"));
+    addTabButton->setToolTip(tr("Add new tab."));
+    connect(addTabButton, SIGNAL(clicked()), this, SLOT(addNewTextTab()));
+    m_textTab->addTab(new QWidget(m_textTab), tr(""));
+    m_textTab->setTabEnabled(0, false);
+    m_textTab->tabBar()->setTabButton(0, QTabBar::RightSide, addTabButton);
+
+    /* Connect signals for close, update and rename. */
+    connect(m_textTab, SIGNAL(tabCloseRequested(int)), this, SLOT(closeTab(int)));
+    connect(m_textTab, SIGNAL(currentChanged(int)), this, SLOT(updateText()));
+    connect(m_textTab, SIGNAL(tabBarDoubleClicked(int)), this, SLOT(renameTab(int)));
+
+    /* Generate the sliding text generator widget. */
+    createGenerateWidget();
+
+    /* Add widgets to layout */
+    editorWidgetLayout->addWidget(m_textTab);
+    editorWidgetLayout->addWidget(m_generateWidgetToggleButton);
+    editorWidgetLayout->addWidget(m_generateWidget);
+
+    /* Set layout to main widget. */
+    editorWidget->setLayout(editorWidgetLayout);
+
+    /* Set main widget to dockwidget. */
+    m_editorDW->setWidget(editorWidget);
+
+}
+
+/* Create widget to generate email text. */
+void MainWindow::createGenerateWidget(){
+    /* Create a frame for this widget. */
+    m_generateWidget = new QFrame(m_editorDW);
+    m_generateWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
+
+    /* Create Layout. */
+    QGridLayout *generateWidgetLayout = new QGridLayout(m_generateWidget);
+    generateWidgetLayout->setContentsMargins(0, 0, 0, 0);
+
+    /* Create Widgets */
+    m_nameColSelect = new QComboBox(m_generateWidget);
+    m_nameColSelect->setToolTip(tr("The column to use for the name of the recipient.\n"
+                             "Select <none> if you do not want to include this."));
+    m_finalGradeColSelect = new QComboBox(m_generateWidget);
+    m_finalGradeColSelect->setToolTip(tr("The column to use for the final grade.\n"
+                              "Select <none> if you do not want to include this."));
+    m_startColSelect = new QComboBox(m_generateWidget);
+    m_startColSelect->setToolTip(tr("We can include a selection of columns to include.\n"
+                              "Specify the column to start with here.\n"
+                              "Select <none> if you do not want to include this."));
+    m_stopColSelect = new QComboBox(m_generateWidget);
+    m_stopColSelect->setToolTip(tr("We can include a selection of columns to include.\n"
+                             "Specify the column to end with here.\n"
+                             "Select <none> if you do not want to include this."));
+    m_maxRowSelect = new QComboBox(m_generateWidget);
+    m_maxRowSelect->setToolTip(tr("We can include the maximum score or default value for\n"
+                            "the columns you have selected.\n"
+                            "Specify the row to use for this here.\n"
+                            "Select <none> if you do not want to include this."));
+    m_headerRowSelect = new QComboBox(m_generateWidget);
+    m_headerRowSelect->setToolTip(tr("We can include names for the columns you have selected.\n"
+                             "Specify the row to use for this here.\n"
+                             "Select <none> if you do not want to include this."));
+
+    /* Button to create text in current tab. */
+    QPushButton *replaceButton = new QPushButton(tr("Current Tab"), m_generateWidget);
+    replaceButton->setToolTip(tr("Generate text and overwrite selected tab."));
+    connect(replaceButton, SIGNAL(clicked()), this, SLOT(generateReplaceText()));
+
+    /* Button to create text in new tab. */
+    QPushButton *newButton = new QPushButton(tr("New Tab"), m_generateWidget);
+    newButton->setToolTip(tr("Generate text and place in new tab."));
+    connect(newButton, SIGNAL(clicked()), this, SLOT(generateNewText()));
+
+    /* Define animation for adjusting the maximumWidth of the widget. */
+    m_toggleGenerateAnimation = new QPropertyAnimation(m_generateWidget, "maximumWidth");
+    m_toggleGenerateAnimation->setDuration(500);
+
+    /* Button to show/hide this widget. */
+    m_generateWidgetToggleButton = new QPushButton(tr("<"), m_editorDW);
+    m_generateWidgetToggleButton->setMinimumWidth(20);
+    m_generateWidgetToggleButton->setMaximumWidth(20);
+    m_generateWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
+    m_generateWidgetToggleButton->setCheckable(true);
+    connect(m_generateWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleGenerateWidget(bool)));
+    connect(m_toggleGenerateAnimation, SIGNAL(finished()), this, SLOT(repaint()));
+    m_generateWidgetToggleButton->setChecked(true);
+
+    /* Add labels to layout */
+    generateWidgetLayout->addWidget(new QLabel(tr("Generate email text:"), m_generateWidget), 0, 0, 1, 2);
+    generateWidgetLayout->addWidget(new QLabel(tr("Name [col]:"), m_generateWidget), 1, 0);
+    generateWidgetLayout->addWidget(new QLabel(tr("Final grade [col]:"), m_generateWidget), 2, 0);
+    generateWidgetLayout->addWidget(new QLabel(tr("Include [col]:"), m_generateWidget), 3, 0);
+    generateWidgetLayout->addWidget(new QLabel(tr("up to (incl) [col]:"), m_generateWidget), 4, 0);
+    generateWidgetLayout->addWidget(new QLabel(tr("Grade title [row]:"), m_generateWidget), 5, 0);
+    generateWidgetLayout->addWidget(new QLabel(tr("Max. points [row]:"), m_generateWidget), 6, 0);
+    generateWidgetLayout->addWidget(new QLabel(tr("Generate text in:"), m_generateWidget), 8, 0);
+
+    /* Add widgets to layout */
+    generateWidgetLayout->addWidget(m_nameColSelect, 1, 1);
+    generateWidgetLayout->addWidget(m_finalGradeColSelect, 2, 1);
+    generateWidgetLayout->addWidget(m_startColSelect, 3, 1);
+    generateWidgetLayout->addWidget(m_stopColSelect, 4, 1);
+    generateWidgetLayout->addWidget(m_headerRowSelect, 5, 1);
+    generateWidgetLayout->addWidget(m_maxRowSelect, 6, 1);
+    generateWidgetLayout->addWidget(newButton, 9, 0);
+    generateWidgetLayout->addWidget(replaceButton, 9, 1);
+
+    /* Set layout to main widget. */
+    m_generateWidget->setLayout(generateWidgetLayout);
+}
+
+/* Create the selection and preview widget. */
+void MainWindow::createPreviewWidget(){
+
+    /* Create the dockwidget. */
+    m_previewDW = new QDockWidget(tr("Selection and preview:"), this);
+    m_previewDW->setMinimumHeight(375);
+
+    /* Create a (main)frame for this widget. */
+    QFrame *previewWidget = new QFrame(m_previewDW);
+    previewWidget->setFrameShape(QFrame::StyledPanel);
+
+    /* Create main layout. */
+    QHBoxLayout *previewWidgetLayout = new QHBoxLayout();
+    previewWidgetLayout->setAlignment(Qt::AlignTop);
+
+    /* Create layouts. */
+    QVBoxLayout *previewBoxLayout = new QVBoxLayout();
+    QHBoxLayout *previewSelectionLayout = new QHBoxLayout();
+
+    /* Create 7-segment display for the number of mails. */
+    m_nMailsDisplay = new QLCDNumber(4, m_previewDW);
+    m_nMailsDisplay->setFrameStyle(QFrame::NoFrame);
+    m_nMailsDisplay->setSegmentStyle(QLCDNumber::Filled);
+    m_nMailsDisplay->setPalette(QPalette(Qt::red));
+    m_nMailsDisplay->setToolTip(tr("This is the number of emails\nthat this program will send."));
+
+    /* Selection for the row (email) to preview. */
+    m_previewSelect = new QComboBox(m_previewDW);
+    m_previewSelect->setToolTip(tr("Select the row (email) you want to preview."));
+    connect(m_previewSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateInfo()));
+
+    /* The preview tool itself is a read-only textbox. */
+    m_previewText = new QTextEdit(m_previewDW);
+    m_previewText->setToolTip(tr("This is how the email looks as it will be send.\n"
+                          "You can select an other email in the selection box above."));
+    m_previewText->setReadOnly(true);
+
+    /*
+     * Create the widget to select the rows to use and the columns for
+     * the email address. Optionally you can add a value to the email address.
+     */
+    createMailSelectWidget();
+
+    /* Set it all in the layouts. */
+    previewSelectionLayout->addWidget(new QLabel(tr("Preview:"), m_previewDW));
+    previewSelectionLayout->addWidget(m_previewSelect);
+    previewSelectionLayout->addWidget(m_nMailsDisplay);
+    previewBoxLayout->addLayout(previewSelectionLayout);
+    previewBoxLayout->addWidget(m_previewText);
+
+    previewWidgetLayout->addWidget(m_rowSelectWidget);
+    previewWidgetLayout->addLayout(previewBoxLayout);
+
+    /* Set layout to main widget. */
+    previewWidget->setLayout(previewWidgetLayout);
+
+    /* Set main widget in the dockwidget. */
+    m_previewDW->setWidget(previewWidget);
+
+}
+
+/* Create widget to select the mail rows. */
+void MainWindow::createMailSelectWidget(){
 
     /* Create Frame. */
     m_rowSelectWidget = new QFrame(this);
@@ -76,6 +498,7 @@ void MainWindow::createRowSelectWidget(){
 
     /* Create layout. */
     QVBoxLayout *rowSelectLayout = new QVBoxLayout(m_rowSelectWidget);
+    rowSelectLayout->setContentsMargins(0, 0, 0, 0);
 
     /* Create row selection. */
     m_firstRowSelect = new QComboBox(m_rowSelectWidget);
@@ -125,454 +548,6 @@ void MainWindow::createRowSelectWidget(){
 
 }
 
-void MainWindow::createGeneralOptionsWidget(){
-
-    m_generalOptionsDW = new QDockWidget(tr("General parameters"), this);
-    m_generalOptionsDW->setFixedHeight(130);
-
-    QFrame *generalOptionsWidget = new QFrame(m_generalOptionsDW);
-    generalOptionsWidget->setFrameShape(QFrame::StyledPanel);
-    //generalOptionsWidget->setMinimumHeight(130);
-    //generalOptionsWidget->setMaximumHeight(130);
-
-    QGridLayout *generalOptionsLayout = new QGridLayout(generalOptionsWidget);
-    generalOptionsLayout->setContentsMargins(0, 5, 0, 5);
-
-    /* Sender name field */
-    m_senderName = new QLineEdit(tr(""), generalOptionsWidget);
-    m_senderName->setToolTip(tr("This field contains the name of the\n"
-                                "sender of the emails. It will also be\n"
-                                "used in the automatic generation of\n"
-                                "the email text.\n\n"
-                                "Example: \"D. Ocent\" or \"Do Cent\""));
-    connect(m_senderName, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
-
-    /* Sender email address field. */
-    m_senderEmail = new QLineEdit(tr(""), generalOptionsWidget);
-    m_senderEmail->setToolTip(tr("This field will be used as the sender\n"
-                                 "email address of the mails that are sent.\n"
-                                 "It will also be used in the SMTP connection\n"
-                                 "as the SMTP username.\n\n"
-                                 "Example: \"docentcode@hr.nl\""));
-    m_senderEmail->setValidator(new QRegExpValidator(QRegExp("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63}", Qt::CaseInsensitive), m_senderEmail));
-    connect(m_senderEmail, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
-
-    /* Email subject field. */
-    m_emailSubject = new QLineEdit(tr(""), generalOptionsWidget);
-    m_emailSubject->setToolTip(tr("Add the subject of the generated emails here.\n\n"
-                                  "Example: \"Cijfers Tentamen\""));
-    connect(m_emailSubject, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
-    m_courseCode = new QLineEdit(tr(""), generalOptionsWidget);
-    m_courseCode->setToolTip(tr("Add the coursecode here.\n"
-                                "It will be added as a [tag] to the\n"
-                                "subject of the generated emails.\n\n"
-                                "Example: \"ELEVAK01\""));
-    connect(m_courseCode, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
-
-    /* Email bcc field. */
-    m_emailBcc = new QLineEdit(tr(""), generalOptionsWidget);
-    m_emailBcc->setToolTip(tr("Send a (blind) copy of every email to this address.\n"
-                              "Multiple addresses may be added seperated by a ';' and\n"
-                              "no spaces.\n\n"
-                              "Example \"collegue@hr.nl;other@extern.com\""));
-    m_emailBcc->setValidator(new QRegExpValidator(QRegExp("(([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63})[;])*", Qt::CaseInsensitive), m_emailBcc));
-    connect(m_emailBcc, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
-
-    m_attachments = new QComboBox(generalOptionsWidget);
-    m_attachments->setToolTip(tr("These attachments will be added to all emails."));
-
-    m_addAttachment = new QPushButton(tr("+"), generalOptionsWidget);
-    m_addAttachment->setToolTip(tr("Add attachment."));
-    m_addAttachment->setMaximumWidth(30);
-    connect(m_addAttachment, SIGNAL(clicked()), this, SLOT(addAttachment()));
-
-    m_deleteSelectedAttachment = new QPushButton(tr("-"), generalOptionsWidget);
-    m_deleteSelectedAttachment->setToolTip(tr("Delete selected attachment."));
-    m_deleteSelectedAttachment->setMaximumWidth(30);
-    connect(m_deleteSelectedAttachment, SIGNAL(clicked()), this, SLOT(deleteAttachment()));
-
-    QHBoxLayout *attachmentLayout = new QHBoxLayout();
-    attachmentLayout->addWidget(m_attachments);
-    attachmentLayout->addWidget(m_deleteSelectedAttachment);
-    attachmentLayout->addWidget(m_addAttachment);
-
-    /* Create the SMTP settings widget. */
-    createSMTPWidget();
-
-    createSettingsWidget();
-
-    /* Add all fields to the layout. */
-    generalOptionsLayout->addWidget(m_settingsWidgetToggleButton, 0, 1, 3, 1);
-    generalOptionsLayout->addWidget(m_settingsWidget, 0, 0, 3, 1);
-    generalOptionsLayout->addWidget(new QLabel(tr("Sender Name:"), generalOptionsWidget), 0, 2);
-    generalOptionsLayout->addWidget(m_senderName, 0, 3);
-    generalOptionsLayout->addWidget(new QLabel(tr("Sender Email:"), generalOptionsWidget), 1, 2);
-    generalOptionsLayout->addWidget(m_senderEmail, 1, 3);
-    generalOptionsLayout->addWidget(new QLabel(tr("Add Bcc:"), generalOptionsWidget), 2, 2);
-    generalOptionsLayout->addWidget(m_emailBcc, 2, 3);
-    generalOptionsLayout->addWidget(new QLabel(tr("Email Subject:"), generalOptionsWidget), 0, 4);
-    generalOptionsLayout->addWidget(m_emailSubject, 0, 5);
-    generalOptionsLayout->addWidget(new QLabel(tr("Course Code:"), generalOptionsWidget), 1, 4);
-    generalOptionsLayout->addWidget(m_courseCode, 1, 5);
-    generalOptionsLayout->addWidget(new QLabel(tr("Attachments"), generalOptionsWidget), 2, 4);
-    generalOptionsLayout->addLayout(attachmentLayout, 2, 5);
-    generalOptionsLayout->addWidget(m_SMTPWidgetToggleButton, 0, 6, 3, 1);
-    generalOptionsLayout->addWidget(m_SMTPWidget, 0, 7, 3, 1);
-
-    /* Set layout to mainwidget. */
-    generalOptionsWidget->setLayout(generalOptionsLayout);
-
-    /* Set mainwidget on DockWidget. */
-    m_generalOptionsDW->setWidget(generalOptionsWidget);
-
-}
-
-void MainWindow::createSettingsWidget(){
-    m_settingsWidget = new QFrame(m_generalOptionsDW);
-
-    QGridLayout *settingsLayout = new QGridLayout(m_settingsWidget);
-
-    m_runtimeValidate = new QCheckBox(tr("Direct Validation"), m_settingsWidget);
-    m_runtimeValidate->setToolTip(tr("Color boxes and buttons red when they have invalid content as you type."));
-    m_runtimeValidate->setChecked(true);
-    connect(m_runtimeValidate, SIGNAL(stateChanged(int)), this, SLOT(updateText()));
-    m_validateHR = new QCheckBox(tr("Validate for HR"), m_settingsWidget);
-    m_validateHR->setToolTip(tr("Validate student email addresses ([7 digits]@hr.nl) and employee code ([5 characters]@hr.nl) for use at the Hogeschool Rotterdam."));
-    m_validateHR->setChecked(true);
-    m_saveOnExitCheckBox = new QCheckBox(tr("Ask to save on exit"), m_settingsWidget);
-    m_saveOnExitCheckBox->setToolTip(tr("Ask before saving text tabs and general parameters on exit. When not checked, these values are automatically saved."));
-    m_saveOnExitCheckBox->setChecked(false);
-
-    m_toggleSettingsAnimation = new QPropertyAnimation(m_settingsWidget, "maximumWidth");
-    m_toggleSettingsAnimation->setDuration(500);
-    m_settingsWidgetToggleButton = new QPushButton(tr("<"), m_generalOptionsDW);
-    m_settingsWidgetToggleButton->setMaximumWidth(20);
-    m_settingsWidgetToggleButton->setMinimumWidth(20);
-    m_settingsWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
-    connect(m_settingsWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleSettingsWidget(bool)));
-    connect(m_toggleSettingsAnimation, SIGNAL(finished()), this, SLOT(repaint()));
-    m_settingsWidgetToggleButton->setCheckable(true);
-    m_settingsWidgetToggleButton->setChecked(true);
-    m_settingsWidgetToggleButton->setChecked(false);
-
-    /* Clear settings button. */
-    QPushButton *clearSettingsButton = new QPushButton(tr("Clear Saved Settings"), m_settingsWidget);
-    clearSettingsButton->setToolTip(tr("Reset all saved and edited settings.\nThe application will be as new."));
-    connect(clearSettingsButton, SIGNAL(clicked()), this, SLOT(deleteSettings()));
-
-    /* Save settings button. */
-    QPushButton *saveSettingsButton = new QPushButton(tr("Save Settings"), m_settingsWidget);
-    saveSettingsButton->setToolTip(tr("Reset all saved and edited settings.\nThe application will be as new."));
-    connect(saveSettingsButton, SIGNAL(clicked()), this, SLOT(saveSettings()));
-
-    settingsLayout->addWidget(saveSettingsButton, 0, 1);
-    settingsLayout->addWidget(clearSettingsButton, 1, 1);
-    settingsLayout->addWidget(m_runtimeValidate, 0, 2);
-    settingsLayout->addWidget(m_validateHR, 1, 2);
-    settingsLayout->addWidget(m_saveOnExitCheckBox, 2, 2);
-
-}
-
-void MainWindow::toggleSettingsWidget(bool s){
-
-    if(!s){
-        /* Hide */
-        m_toggleSettingsAnimation->setStartValue(400);
-        m_toggleSettingsAnimation->setEndValue(0);
-        m_settingsWidgetToggleButton->setText(tr(">"));
-        m_settingsWidgetToggleButton->setToolTip(tr("Show settings"));
-    }
-    else{
-        /* Show. */
-        m_toggleSettingsAnimation->setStartValue(0);
-        m_toggleSettingsAnimation->setEndValue(400);
-        m_settingsWidgetToggleButton->setText(tr("<"));
-        m_settingsWidgetToggleButton->setToolTip(tr("Hide settings"));
-    }
-
-    m_toggleSettingsAnimation->start();
-
-}
-
-/* Creates the SMTP settings widget */
-void MainWindow::createSMTPWidget(){
-
-    m_SMTPWidget = new QFrame(m_generalOptionsDW);
-
-    QGridLayout *smtpSettingsLayout = new QGridLayout(m_SMTPWidget);
-
-    m_SMTPserver = new QLineEdit(tr(""), m_SMTPWidget);
-
-    m_SMTPport = new QLineEdit(tr(""), m_SMTPWidget);
-    m_SMTPport->setValidator(new QIntValidator(1, 65535, m_SMTPport));
-
-    m_SMTPtype = new QComboBox(m_SMTPWidget);
-    m_SMTPtype->addItem(tr("SSL"), SmtpClient::SslConnection);
-    m_SMTPtype->addItem(tr("TLS"), SmtpClient::TlsConnection);
-    m_SMTPtype->addItem(tr("TCP"), SmtpClient::TcpConnection);
-
-    QPushButton *SMTPConnectButton = new QPushButton(tr("SMTP Connect"), m_SMTPWidget);
-    SMTPConnectButton->setToolTip(tr("Connect to the SMTP server now."));
-    connect(SMTPConnectButton, SIGNAL(clicked()), this, SLOT(SMTPconnect()));
-
-    m_toggleSMTPAnimation = new QPropertyAnimation(m_SMTPWidget, "maximumWidth");
-    m_toggleSMTPAnimation->setDuration(500);
-    m_SMTPWidgetToggleButton = new QPushButton(tr("<"), m_generalOptionsDW);
-    m_SMTPWidgetToggleButton->setMaximumWidth(20);
-    m_SMTPWidgetToggleButton->setMinimumWidth(20);
-    m_SMTPWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
-    connect(m_SMTPWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleSMTPWidget(bool)));
-    connect(m_toggleSMTPAnimation, SIGNAL(finished()), this, SLOT(repaint()));
-    m_SMTPWidgetToggleButton->setCheckable(true);
-    m_SMTPWidgetToggleButton->setChecked(true);
-    m_SMTPWidgetToggleButton->setChecked(false);
-
-    smtpSettingsLayout->addWidget(new QLabel(tr("SMTP server:"), m_SMTPWidget), 0, 1);
-    smtpSettingsLayout->addWidget(m_SMTPserver, 0, 2);
-    smtpSettingsLayout->addWidget(new QLabel(tr("SMTP port:"), m_SMTPWidget), 1, 1);
-    smtpSettingsLayout->addWidget(m_SMTPport, 1, 2);
-    smtpSettingsLayout->addWidget(m_SMTPtype, 2, 1);
-    smtpSettingsLayout->addWidget(SMTPConnectButton, 2, 2);
-
-    m_SMTPWidget->setLayout(smtpSettingsLayout);
-
-}
-
-void MainWindow::toggleSMTPWidget(bool s){
-
-    if(!s){
-        /* Hide */
-        m_toggleSMTPAnimation->setStartValue(400);
-        m_toggleSMTPAnimation->setEndValue(0);
-        m_SMTPWidgetToggleButton->setText(tr("<"));
-        m_SMTPWidgetToggleButton->setToolTip(tr("Show SMTP options"));
-    }
-    else{
-        /* Show. */
-        m_toggleSMTPAnimation->setStartValue(0);
-        m_toggleSMTPAnimation->setEndValue(400);
-        m_SMTPWidgetToggleButton->setText(tr(">"));
-        m_SMTPWidgetToggleButton->setToolTip(tr("Hide SMTP options"));
-    }
-
-    m_toggleSMTPAnimation->start();
-
-}
-
-void MainWindow::createEditorWidget(){
-
-    /* Create Dockwidget for the editor. */
-    m_editorDW = new QDockWidget(tr("Edit:"), this);
-    m_editorDW->setMinimumHeight(375);
-
-    /* Create main widget. */
-    QFrame *editorWidget = new QFrame(m_editorDW);
-    editorWidget->setFrameShape(QFrame::StyledPanel);
-
-    /* Create Layout. */
-    QHBoxLayout *editorWidgetLayout = new QHBoxLayout(editorWidget);
-
-    /* Create tabwidget to contain editors. */
-    m_textTab = new QTabWidget(editorWidget);
-    //m_textTab->setTabPosition(QTabWidget::South);
-    m_textTab->setTabsClosable(true);
-
-    /* Button to add new tab. */
-    QToolButton *addTabButton = new QToolButton(m_textTab);
-    addTabButton->setText(tr("+"));
-    addTabButton->setToolTip(tr("Add new tab."));
-    connect(addTabButton, SIGNAL(clicked()), this, SLOT(addNewTextTab()));
-    m_textTab->addTab(new QWidget(m_textTab), tr(""));
-    m_textTab->setTabEnabled(0, false);
-    m_textTab->tabBar()->setTabButton(0, QTabBar::RightSide, addTabButton);
-
-    /* Connect signals for close, update and rename. */
-    connect(m_textTab, SIGNAL(tabCloseRequested(int)), this, SLOT(closeTab(int)));
-    connect(m_textTab, SIGNAL(currentChanged(int)), this, SLOT(updateText()));
-    connect(m_textTab, SIGNAL(tabBarDoubleClicked(int)), this, SLOT(renameTab(int)));
-
-    /* Generate the sliding text generator widget. */
-    createGenerateWidget();
-
-    /* Add widgets to layout */
-    editorWidgetLayout->addWidget(m_textTab);
-    editorWidgetLayout->addWidget(m_generateWidgetToggleButton);
-    editorWidgetLayout->addWidget(m_generateWidget);
-
-    /* Set layout to main widget. */
-    editorWidget->setLayout(editorWidgetLayout);
-
-    /* Set main widget to dockwidget. */
-    m_editorDW->setWidget(editorWidget);
-
-}
-
-void MainWindow::createGenerateWidget(){
-    /* Create a frame for this widget. */
-    m_generateWidget = new QFrame(m_editorDW);
-    m_generateWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
-
-    /* Create Layout. */
-    QGridLayout *generateWidgetLayout = new QGridLayout(m_generateWidget);
-
-    /* Create Widgets */
-    m_nameColSelect = new QComboBox(m_generateWidget);
-    m_nameColSelect->setToolTip(tr("The column to use for the name of the recipient.\n"
-                             "Select <none> if you do not want to include this."));
-    m_finalGradeColSelect = new QComboBox(m_generateWidget);
-    m_finalGradeColSelect->setToolTip(tr("The column to use for the final grade.\n"
-                              "Select <none> if you do not want to include this."));
-    m_startColSelect = new QComboBox(m_generateWidget);
-    m_startColSelect->setToolTip(tr("We can include a selection of columns to include.\n"
-                              "Specify the column to start with here.\n"
-                              "Select <none> if you do not want to include this."));
-    m_stopColSelect = new QComboBox(m_generateWidget);
-    m_stopColSelect->setToolTip(tr("We can include a selection of columns to include.\n"
-                             "Specify the column to end with here.\n"
-                             "Select <none> if you do not want to include this."));
-    m_maxRowSelect = new QComboBox(m_generateWidget);
-    m_maxRowSelect->setToolTip(tr("We can include the maximum score or default value for\n"
-                            "the columns you have selected.\n"
-                            "Specify the row to use for this here.\n"
-                            "Select <none> if you do not want to include this."));
-    m_headerRowSelect = new QComboBox(m_generateWidget);
-    m_headerRowSelect->setToolTip(tr("We can include names for the columns you have selected.\n"
-                             "Specify the row to use for this here.\n"
-                             "Select <none> if you do not want to include this."));
-
-    /* Button to create text in current tab. */
-    QPushButton *replaceButton = new QPushButton(tr("Current Tab"), m_generateWidget);
-    replaceButton->setToolTip(tr("Generate text and overwrite selected tab."));
-    connect(replaceButton, SIGNAL(clicked()), this, SLOT(generateReplaceText()));
-
-    /* Button to create text in new tab. */
-    QPushButton *newButton = new QPushButton(tr("New Tab"), m_generateWidget);
-    newButton->setToolTip(tr("Generate text and place in new tab."));
-    connect(newButton, SIGNAL(clicked()), this, SLOT(generateNewText()));
-
-    /* Define animation for adjusting the maximumWidth of the widget. */
-    m_toggleGenerateAnimation = new QPropertyAnimation(m_generateWidget, "maximumWidth");
-    m_toggleGenerateAnimation->setDuration(500);
-
-    /* Button to show/hide this widget. */
-    m_generateWidgetToggleButton = new QPushButton(tr("<"), m_editorDW);
-    m_generateWidgetToggleButton->setMinimumWidth(20);
-    m_generateWidgetToggleButton->setMaximumWidth(20);
-    m_generateWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
-    m_generateWidgetToggleButton->setCheckable(true);
-    connect(m_generateWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleGenerateWidget(bool)));
-    m_generateWidgetToggleButton->setChecked(true);
-
-    /* Add labels to layout */
-    generateWidgetLayout->addWidget(new QLabel(tr("Generate email text:"), m_generateWidget), 0, 1, 1, 2);
-    generateWidgetLayout->addWidget(new QLabel(tr("Name [col]:"), m_generateWidget), 1, 1);
-    generateWidgetLayout->addWidget(new QLabel(tr("Final grade [col]:"), m_generateWidget), 2, 1);
-    generateWidgetLayout->addWidget(new QLabel(tr("Include [col]:"), m_generateWidget), 3, 1);
-    generateWidgetLayout->addWidget(new QLabel(tr("up to (incl) [col]:"), m_generateWidget), 4, 1);
-    generateWidgetLayout->addWidget(new QLabel(tr("Grade title [row]:"), m_generateWidget), 5, 1);
-    generateWidgetLayout->addWidget(new QLabel(tr("Max. points [row]:"), m_generateWidget), 6, 1);
-    generateWidgetLayout->addWidget(new QLabel(tr("Generate text in:"), m_generateWidget), 8, 1);
-
-    /* Add widgets to layout */
-    generateWidgetLayout->addWidget(m_nameColSelect, 1, 2);
-    generateWidgetLayout->addWidget(m_finalGradeColSelect, 2, 2);
-    generateWidgetLayout->addWidget(m_startColSelect, 3, 2);
-    generateWidgetLayout->addWidget(m_stopColSelect, 4, 2);
-    generateWidgetLayout->addWidget(m_headerRowSelect, 5, 2);
-    generateWidgetLayout->addWidget(m_maxRowSelect, 6, 2);
-    generateWidgetLayout->addWidget(newButton, 9, 1);
-    generateWidgetLayout->addWidget(replaceButton, 9, 2);
-    /* Add the show/hide button. */
-    //generateWidgetLayout->addWidget(m_generateWidgetToggleButton, 0, 0, 10, 1);
-
-    /* Set layout to main widget. */
-    m_generateWidget->setLayout(generateWidgetLayout);
-}
-
-/* Show/hide the generateWidget. */
-void MainWindow::toggleGenerateWidget(bool s){
-
-    if(!s){
-        /* Hide. */
-        m_toggleGenerateAnimation->setStartValue(400);
-        m_toggleGenerateAnimation->setEndValue(0);
-        m_generateWidgetToggleButton->setText(tr("<"));
-        m_generateWidgetToggleButton->setToolTip(tr("Show options"));
-    }
-    else{
-        /* Show. */
-        m_toggleGenerateAnimation->setStartValue(0);
-        m_toggleGenerateAnimation->setEndValue(400);
-        m_generateWidgetToggleButton->setText(tr(">"));
-        m_generateWidgetToggleButton->setToolTip(tr("Hide options"));
-    }
-
-    /* Start animation. */
-    m_toggleGenerateAnimation->start();
-
-}
-
-/* Create the selection and preview widget. */
-void MainWindow::createPreviewWidget(){
-
-    /* Create the dockwidget. */
-    m_previewDW = new QDockWidget(tr("Selection and preview:"), this);
-    m_previewDW->setMinimumHeight(375);
-
-    /* Create a (main)frame for this widget. */
-    QFrame *previewWidget = new QFrame(m_previewDW);
-    previewWidget->setFrameShape(QFrame::StyledPanel);
-
-    /* Create main layout. */
-    QHBoxLayout *previewWidgetLayout = new QHBoxLayout();
-    previewWidgetLayout->setAlignment(Qt::AlignTop);
-
-    /* Create layouts. */
-    QVBoxLayout *previewBoxLayout = new QVBoxLayout();
-    QHBoxLayout *previewSelectionLayout = new QHBoxLayout();
-
-    /* Create 7-segment display for the number of mails. */
-    m_nMailsDisplay = new QLCDNumber(4, m_previewDW);
-    m_nMailsDisplay->setFrameStyle(QFrame::NoFrame);
-    m_nMailsDisplay->setSegmentStyle(QLCDNumber::Filled);
-    m_nMailsDisplay->setPalette(QPalette(Qt::red));
-    m_nMailsDisplay->setToolTip(tr("This is the number of emails\nthat this program will send."));
-
-    /* Selection for the row (email) to preview. */
-    m_previewSelect = new QComboBox(m_previewDW);
-    m_previewSelect->setToolTip(tr("Select the row (email) you want to preview."));
-    connect(m_previewSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateInfo()));
-
-    /* The preview tool itself is a read-only textbox. */
-    m_previewText = new QTextEdit(m_previewDW);
-    m_previewText->setToolTip(tr("This is how the email looks as it will be send.\n"
-                          "You can select an other email in the selection box above."));
-    m_previewText->setReadOnly(true);
-
-    /*
-     * Create the widget to select the rows to use and the columns for
-     * the email address. Optionally you can add a value to the email address.
-     */
-    createRowSelectWidget();
-
-    /* Set it all in the layouts. */
-    previewSelectionLayout->addWidget(new QLabel(tr("Preview:"), m_previewDW));
-    previewSelectionLayout->addWidget(m_previewSelect);
-    previewSelectionLayout->addWidget(m_nMailsDisplay);
-    previewBoxLayout->addLayout(previewSelectionLayout);
-    previewBoxLayout->addWidget(m_previewText);
-
-    previewWidgetLayout->addWidget(m_rowSelectWidget);
-    previewWidgetLayout->addLayout(previewBoxLayout);
-
-    /* Set layout to main widget. */
-    previewWidget->setLayout(previewWidgetLayout);
-
-    /* Set main widget in the dockwidget. */
-    m_previewDW->setWidget(previewWidget);
-
-}
-
 /* Create the preview tool for xlsx sheets. */
 void MainWindow::createXlsxViewerWidget(){
 
@@ -585,33 +560,34 @@ void MainWindow::createXlsxViewerWidget(){
     QFrame *xlsxWidget = new QFrame(m_xlsxViewerDW);
     xlsxWidget->setFrameShape(QFrame::StyledPanel);
 
-    QVBoxLayout *l = new QVBoxLayout();
-    QHBoxLayout *l1 = new QHBoxLayout();
-
-    m_loadXlsxFileButton = new QPushButton(tr("Load xlsx file"), m_xlsxViewerDW);
-    m_loadXlsxFileButton->setToolTip(tr("Select an xlsx file from your computer.\n"
-                                        "All sheets will be loaded in this viewer,\n"
-                                        "in addition to those already loaded.\n"
-                                        "The last sheet loaded will be active."));
-    connect(m_loadXlsxFileButton, SIGNAL(clicked()), this, SLOT(loadSheet()));
+    QVBoxLayout *xlsxWidgetLayout = new QVBoxLayout();
 
     /* Add the tabwidget where the tabs from the xlsx file can be loaded. */
     m_xlsxTab = new QTabWidget(m_xlsxViewerDW);
-    m_xlsxTab->setTabPosition(QTabWidget::South);
     m_xlsxTab->setTabsClosable(true);
     m_xlsxTab->setToolTip(tr("The selected tab will be used to\n"
                              "generate the e-mails from."));
     connect(m_xlsxTab, SIGNAL(tabCloseRequested(int)), this, SLOT(closeTab(int)));
     connect(m_xlsxTab, SIGNAL(currentChanged(int)), this, SLOT(updateSheet()));
+    connect(m_xlsxTab, SIGNAL(tabBarDoubleClicked(int)), this, SLOT(renameTab(int)));
 
-    /* Set layout. */
-    l1->addStretch(1);
-    l1->addWidget(m_loadXlsxFileButton);
-    l->addLayout(l1);
-    l->addWidget(m_xlsxTab);
+
+    /* Button to add new tab. */
+    m_loadXlsxFileButton = new QToolButton(m_xlsxTab);
+    m_loadXlsxFileButton->setText(tr("Load xlsx file"));
+    m_loadXlsxFileButton->setToolTip(tr("Select an xlsx file from your computer.\n"
+                                        "All sheets will be loaded in this viewer,\n"
+                                        "in addition to those already loaded.\n"
+                                        "The last sheet loaded will be active."));
+    connect(m_loadXlsxFileButton, SIGNAL(clicked()), this, SLOT(loadSheet()));
+    m_xlsxTab->addTab(new QWidget(m_xlsxTab), tr(""));
+    m_xlsxTab->setTabEnabled(0, false);
+    m_xlsxTab->tabBar()->setTabButton(0, QTabBar::RightSide, m_loadXlsxFileButton);
+
+    xlsxWidgetLayout->addWidget(m_xlsxTab);
 
     /* Set layout to main widget. */
-    xlsxWidget->setLayout(l);
+    xlsxWidget->setLayout(xlsxWidgetLayout);
 
     /* Set main widget to dockwidget. */
     m_xlsxViewerDW->setWidget(xlsxWidget);
@@ -624,23 +600,27 @@ void MainWindow::createToolBar(){
     m_toolBar = new QToolBar(this);
     m_toolBar->setMovable(false);
 
+    /* Infobar */
     QLabel *infoLabel = new QLabel(m_toolBar);
     infoLabel->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
     infoLabel->setText(tr(APPLICATION_NAME) + tr(" - ")+ tr(APPLICATION_COMPANY) + tr(" - ") + tr(APPLICATION_YEAR));
 
-    QAction *help = new QAction(tr("Help"), m_toolBar);
-    connect(help, SIGNAL(triggered()), this, SLOT(test()));
+    /* Help Button. */
+    //QAction *help = new QAction(tr("Help"), m_toolBar);
 
+    /* About Button. */
     QAction *about = new QAction(tr("About"), m_toolBar);
     connect(about, SIGNAL(triggered()), this, SLOT(about()));
 
+    /* About Qt Button. */
     QAction *qtInfo = new QAction(tr("Qt"), m_toolBar);
     connect(qtInfo, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
 
+    /* Setup layout. */
     m_toolBar->addWidget(infoLabel);
     m_toolBar->addSeparator();
-    m_toolBar->addAction(help);
-    m_toolBar->addSeparator();
+    //m_toolBar->addAction(help);
+    //m_toolBar->addSeparator();
     m_toolBar->addAction(about);
     m_toolBar->addSeparator();
     m_toolBar->addAction(qtInfo);
@@ -648,589 +628,11 @@ void MainWindow::createToolBar(){
 
 }
 
-/* Load an xlsx sheet */
-void MainWindow::loadSheet(){
-
-    /* Ask for the file. */
-    QString filePath = QFileDialog::getOpenFileName(0, "Open xlsx file", QString(), "*.xlsx");
-    if(filePath.isEmpty()){
-        return;
-    }
-
-    /* Open the document. */
-    QXlsx::Document *xlsx = new QXlsx::Document(filePath, m_xlsxTab);
-
-    /* Add add sheets (tabs) to the viewer. */
-    foreach(QString sheetName, xlsx->sheetNames()){
-
-        /* Load sheet */
-        QXlsx::Worksheet *sheet = dynamic_cast<QXlsx::Worksheet *>(xlsx->sheet(sheetName));
-        if(sheet){
-
-            /* Create a tableview for this sheet. */
-            QTableView *view = new QTableView(m_xlsxTab);
-            view->setToolTip(tr("This is the data (read-only) from the selected sheet\n"
-                                "that will be used to generate the e-mail from."));
-
-            /* Set to read-only. */
-            view->setEditTriggers(QAbstractItemView::NoEditTriggers);
-            view->setModel(new QXlsx::SheetModel(sheet, view));
-
-            /* Handle merged cells. */
-            foreach (QXlsx::CellRange range, sheet->mergedCells()){
-                view->setSpan(range.firstRow()-1, range.firstColumn()-1, range.rowCount(), range.columnCount());
-            }
-
-            /* Add sheet as a tab to viewer. */
-            int tabIndex = m_xlsxTab->addTab(view, sheetName);
-            m_xlsxTab->setCurrentIndex(tabIndex);
-        }
-    }
-}
-
-/* Close tab in a tabwidget */
-void MainWindow::closeTab(int index){
-
-    /* Get the tabwidget */
-    QTabWidget *tw = (QTabWidget*)sender();
-
-    /* Get the tab. */
-    QWidget *tab = tw->widget(index);
-
-    /* The editor cannot have 0 tabs. */
-    if(tw == m_textTab && tw->count() < 3){
-        return;
-    }
-
-    /* Sure? */
-    if(QMessageBox::question(this, tr("Close tab?"),
-                                   tr("Are you sure you want to close the tab \"") +
-                                   tw->tabText(index) +
-                                   tr("\"?")
-                             ) != QMessageBox::Yes){
-        return;
-    }
-
-    /* Remove and delete tab. */
-    tw->removeTab(index);
-    delete tab;
-
-}
-
-/* Hacky thing to avoid circular updates when loading new values into the selection boxes. */
-void MainWindow::blockRowSignals(bool b){
-    m_firstRowSelect->blockSignals(b);
-    m_lastRowSelect->blockSignals(b);
-    m_previewSelect->blockSignals(b);
-}
-
-/* Slot called when selecting an onther sheet. */
-void MainWindow::updateSheet(){
-
-    /* Get a pointer to the data. */
-    QTableView *d = (QTableView*)m_xlsxTab->currentWidget();
-
-    /* Extract columns and rows. */
-    QStringList columnNames;
-    QStringList rowNames;
-    if(d != NULL){
-        for(int i = 0; i < d->model()->columnCount(); i++){
-            columnNames.append(d->model()->headerData(i, Qt::Horizontal).toString());
-        }
-        for(int i = 1; i <= d->model()->rowCount(); i++){
-            rowNames.append(QString::number(i));
-        }
-    }
-
-    /* Insert extracted values into selection boxes. */
-    QString tmp = m_emailColumnSelect->currentText();
-    m_emailColumnSelect->clear();
-    m_emailColumnSelect->addItems(columnNames);
-    m_emailColumnSelect->setCurrentText(tmp);
-
-    /* Now do those who may be ignored. */
-    columnNames.prepend(tr("<none>"));
-    rowNames.prepend(tr("<none>"));
-
-    QComboBox *cols[] = {m_nameColSelect, m_finalGradeColSelect, m_startColSelect, m_stopColSelect};
-    for(int i = 0; i < 4; i++){
-        QComboBox *c = cols[i];
-        QString tmp = c->currentText();
-        c->clear();
-        c->addItems(columnNames);
-        c->setCurrentText(tmp);
-    }
-
-    QComboBox *rows[] = {m_headerRowSelect, m_maxRowSelect};
-    for(int i = 0; i < 2; i++){
-        QComboBox *c = rows[i];
-        QString tmp = c->currentText();
-        c->clear();
-        c->addItems(rowNames);
-        c->setCurrentText(tmp);
-    }
-
-    /* Reload values. */
-    updateInfo();
-}
-
-/* Update dependend items when values change. */
-void MainWindow::updateInfo(){
-    /* Block (circular) updates. */
-    blockRowSignals(true);
-
-    /* Get pointer to data and find values. */
-    QTableView *d = (QTableView*)m_xlsxTab->currentWidget();
-    int max = 0;
-    int start = 1;
-    int stop = max;
-    int preview = 1;
-
-    if(d != NULL){
-        max = d->model()->rowCount();
-        stop = max;
-    }
-
-    if(!m_firstRowSelect->currentText().isEmpty()){
-        start = m_firstRowSelect->currentText().toInt();
-    }
-    if(!m_lastRowSelect->currentText().isEmpty()){
-        stop = m_lastRowSelect->currentText().toInt();
-    }
-    if(!m_previewSelect->currentText().isEmpty()){
-        preview = m_previewSelect->currentText().toInt();
-    }
-
-    /* Remove items from selection boxes. */
-    m_firstRowSelect->clear();
-    m_lastRowSelect->clear();
-    m_previewSelect->clear();
-
-    /* Insert new items to selection boxes. */
-    for(int i = 1; i <= max; i++){
-        m_firstRowSelect->addItem(QString::number(i));
-        if(i >= start && i <= stop){
-            m_previewSelect->addItem(QString::number(i));
-        }
-        if(i >= start){
-            m_lastRowSelect->addItem(QString::number(i));
-        }
-    }
-
-    /* Set old values if useful. */
-    m_firstRowSelect->setCurrentText(QString::number(start));
-    if(stop >= start){
-        m_lastRowSelect->setCurrentText(QString::number(stop));
-    }
-    else{
-        m_lastRowSelect->setCurrentText(QString::number(max));
-    }
-    m_previewSelect->setCurrentText(QString::number(preview));
-
-    /* Re-enable updates. */
-    blockRowSignals(false);
-
-    /* Calculate and set number of generated mails. */
-    if(max > 0){
-        m_nMailsDisplay->display(m_lastRowSelect->currentText().toInt() - m_firstRowSelect->currentText().toInt() + 1);
-    }
-    else{
-        m_nMailsDisplay->display(0);
-    }
-
-    /* Update preview text. */
-    updateText();
-}
-
-/* Update and parse values. */
-void MainWindow::updateText(){
-
-    QStringList bcc_addresses = m_emailBcc->text().split(";");
-
-    /* Generate preview text. */
-    QString res;
-
-    /* Get the mail number. */
-    int offset = m_previewSelect->currentText().toInt();
-
-    if(m_runtimeValidate->isChecked()){
-        /* Check option fields and make red when useless. */
-        !isValidEmail(m_senderEmail->text()) ? m_senderEmail->setStyleSheet(tr("background-color: #FF9999;")) :
-                                               m_senderEmail->setStyleSheet(tr(""));
-
-        if(m_validateHR->isChecked()){
-            !isValidHREmployeeEmail(m_senderEmail->text()) ? m_senderEmail->setStyleSheet(tr("background-color: #FF9999;")) :
-                                                            m_senderEmail->setStyleSheet(tr(""));
-        }
-
-        m_emailSubject->text().length() < 3  ? m_emailSubject->setStyleSheet(tr("background-color: #FF9999;")) :
-                                               m_emailSubject->setStyleSheet(tr(""));
-
-        m_courseCode->text().length() < 3    ? m_courseCode->setStyleSheet(tr("background-color: #FF9999;")) :
-                                               m_courseCode->setStyleSheet(tr(""));
-
-        m_xlsxTab->count() < 1               ? m_loadXlsxFileButton->setStyleSheet(tr("background-color: #FF9999;")) :
-                                               m_loadXlsxFileButton->setStyleSheet(tr(""));
-
-        foreach(QString bcc, bcc_addresses){
-            !bcc.isEmpty() && !isValidEmail(bcc) ? m_emailBcc->setStyleSheet(tr("background-color: #FF9999;")) :
-                                                   m_emailBcc->setStyleSheet(tr(""));
-        }
-    }
-    else{
-        m_senderEmail->setStyleSheet(tr(""));
-        m_emailSubject->setStyleSheet(tr(""));
-        m_courseCode->setStyleSheet(tr(""));
-        m_loadXlsxFileButton->setStyleSheet(tr(""));
-        m_emailBcc->setStyleSheet(tr(""));
-    }
-
-    /* Get the main contents. */
-    res += getMailHeader(offset);
-    res += getMailText(offset);
-
-    /* set text to preview. */
-    m_previewText->setText(res);
-}
-
-/* Connect to SMTP server. */
-void MainWindow::SMTPconnect(){
-    bool ok;
-
-    /* Get servername. */
-    QString smtpServer = m_SMTPserver->text();
-
-    /* Get portnumber. */
-    int smtpPort = m_SMTPport->text().toInt();
-
-    /* Get connection type. */
-    SmtpClient::ConnectionType smtpType = static_cast<SmtpClient::ConnectionType>(m_SMTPtype->currentData().toInt());
-
-    /* Lib likes to throw exceptions... */
-    try {
-        /* Try to set values. */
-        m_SMTPConnection = new SmtpClient(smtpServer, smtpPort, smtpType);
-    }
-    catch (...){
-
-    }
-
-    /*
-     * Get login name for SMTP server.
-     *
-     * Default is the sender email address.
-     */
-    QString user = QInputDialog::getText(this, tr("Username:"),
-                                           tr("SMTP username for ") + smtpServer +
-                                           tr(":") + QString::number(smtpPort),
-                                           QLineEdit::Normal, m_senderEmail->text(),
-                                         &ok);
-
-    /* Value not empty and user dit not press close or cancel? */
-    if(!ok || user.isEmpty()){
-        SMTPdisconnect();
-        return;
-    }
-
-    /* Ask for SMTP password. */
-    QString password = QInputDialog::getText(this, tr("Password:"),
-                                               tr("SMTP Password for <") + user +
-                                               tr(">@") + smtpServer +
-                                               tr(":") + QString::number(smtpPort),
-                                               QLineEdit::Password, tr(""),
-                                             &ok);
-
-    /* Value not empty and user dit not press close or cancel? */
-    if(!ok || password.isEmpty()){
-        SMTPdisconnect();
-        return;
-    }
-
-    /* Set username and password. */
-    m_SMTPConnection->setUser(user);
-    m_SMTPConnection->setPassword(password);
-
-    /* Lib throws exceptions... */
-    try {
-        /* Connect to SMTP server. */
-        if(!m_SMTPConnection->connectToHost()){
-            QMessageBox::warning(this, tr("SMTP Connect"), tr("Could not connect to SMTP server!"));
-            SMTPdisconnect();
-            return;
-        }
-
-        /* Login. */
-        if(!m_SMTPConnection->login()){
-            QMessageBox::warning(this, tr("SMTP Connect"), tr("SMTP login failed! Wrong username/password."));
-            SMTPdisconnect();
-            return;
-        }
-    }
-    catch (...){
-
-    }
-
-}
-
-/* Disconnect. */
-void MainWindow::SMTPdisconnect(){
-    if(m_SMTPConnection != NULL){
-
-        /* Should include this, but throws uncatchable exceptions. */
-        //m_smtp->quit();
-
-        delete m_SMTPConnection;
-    }
-
-    /* Set to NULL for next connect. */
-    m_SMTPConnection = NULL;
-}
-
-/* The main thing.. Sending emails. */
-void MainWindow::sendMails(){
-
-    /* Read start/stop rows and calculate number of mails. */
-    int start = m_firstRowSelect->currentText().toInt();
-    int stop = m_lastRowSelect->currentText().toInt();
-    int nMails = stop - start + 1;
-
-    /* Check sender. */
-    QString fromEmail = m_senderEmail->text();
-    if(!isValidEmail(fromEmail)){
-        QMessageBox::warning(this, tr("Error:"), tr("Sender email address is invalid!"));
-        m_senderEmail->setFocus();
-        return;
-    }
-
-    /* Use name or email address as sender. */
-    QString fromName = m_senderName->text();
-    if(fromName.isEmpty()){
-        fromName = fromEmail;
-    }
-
-    /* Check course code. */
-    QString coursecode = m_courseCode->text();
-    if(coursecode.length() < 2){
-        QMessageBox::warning(this, tr("Error:"), tr("Course code cannot be less than 2 characters!"));
-        m_courseCode->setFocus();
-        return;
-    }
-
-    /* Check subject. */
-    QString subject = tr("[") + coursecode + tr("] ") + m_emailSubject->text();
-    if(m_emailSubject->text().length() < 2){
-        QMessageBox::warning(this, tr("Error:"), tr("Subject cannot be less than 2 characters!"));
-        m_emailSubject->setFocus();
-        return;
-    }
-
-    /* Check if there are any mails to send. */
-    if(m_nMailsDisplay->value() == 0){
-        QMessageBox::warning(this, tr("Error:"), tr("The number of mails is 0!"));
-        return;
-    }
-
-    /* Check mail addresses and contents. */
-    for(int i = start; i <= stop; i++){
-        QString recv_mail = getData(m_emailColumnSelect->currentText(), i) + m_emailAppendText->text();
-
-        /* Recipient address OK? */
-        if(!isValidEmail(recv_mail)){
-            QMessageBox::warning(this, tr("Error:"), tr("The email address ") + recv_mail + tr(" on line ") + QString::number(i) + tr(" is invalid!"));
-            m_emailColumnSelect->setFocus();
-            return;
-        }
-        if(m_validateHR->isChecked()){
-            if(!isValidHRStudentEmail(recv_mail)){
-                QMessageBox::warning(this, tr("Error:"), tr("The email address ") + recv_mail + tr(" on line ") + QString::number(i) + tr(" is not a valid HR student email address!"));
-                return;
-            }
-        }
-
-        /* Mailtext OK? */
-        if(getMailText(i).contains("[INV_REF!]")){
-            QMessageBox::warning(this, tr("Error:"), tr("There are invalid references in the mailtext of email ") + QString::number(i) + tr("!"));
-            return;
-        }
-    }
-
-    /* Get bcc addresses. */
-    QStringList bcc_addresses = m_emailBcc->text().split(";");
-
-    /* Check if the bcc's are OK. */
-    foreach(QString bcc, bcc_addresses){
-        if(bcc.isEmpty()){
-            bcc_addresses.removeAll(bcc);
-            continue;
-        }
-
-        if(!isValidEmail(bcc)){
-            QMessageBox::warning(this, tr("Error:"), tr("The bcc email address ") + bcc + tr(" is invalid!"));
-            m_emailBcc->setFocus();
-            return;
-        }
-    }
-
-    /* Read Attachments. */
-    QList<QFile*> attachmentFiles;
-    QList<MimeAttachment*> attachments;
-    for(int i = 0; i < m_attachments->count(); i++){
-        QString fileName = m_attachments->itemData(i).toString();
-        QFile *f = new QFile(fileName);
-        if(f->exists()){
-            MimeAttachment *att = new MimeAttachment(f);
-            attachments.append(att);
-        }
-        else{
-            QMessageBox::warning(this, tr("Error:"), tr("Attachment ") + fileName + tr(" can not be loaded!"));
-            return;
-        }
-    }
-
-    /* Do we already have a connection? If not, connect. */
-    if(m_SMTPConnection == NULL){
-        SMTPconnect();
-        if(m_SMTPConnection == NULL){
-            return;
-        }
-    }
-
-    /* Sure? */
-    if(QMessageBox::question(this, tr("Send Emails now?"),
-                                   tr("Are you sure you want to send ") +
-                                   QString::number(m_nMailsDisplay->value()) +
-                                   tr(" emails with the ") +
-                                   tr("subject \" [") + m_courseCode->text() + tr("] ") + m_emailSubject->text() + tr("\"") +
-                                   tr(" and ") + QString::number(m_attachments->count()) + tr(" attachments now?")
-                             ) != QMessageBox::Yes){
-        return;
-    }
-
-    QString success;
-    int nSuccess = 0;
-    QString failed;
-    int nFailed = 0;
-    QString allTexts;
-
-    /* Sender is the same for each mail. */
-    EmailAddress sender(fromEmail, fromName);
-
-    /* Generate and send messages. */
-    for(int i = start; i <= stop; i++){
-
-        /* Message and content. */
-        MimeMessage message;
-        MimeText text;
-
-        /* Receiver email address. */
-        QString recv_mail = getData(m_emailColumnSelect->currentText(), i) + m_emailAppendText->text();
-        EmailAddress receiver(recv_mail);
-
-        /* Set sender and receiver. */
-        message.setSender(&sender);
-        message.addRecipient(&receiver);
-
-        /* Add bcc's */
-        foreach(QString bcc, bcc_addresses){
-            message.addBcc(new EmailAddress(bcc));
-        }
-
-        /* Add subject */
-        message.setSubject(subject);
-
-        /* Add contents. */
-        QString mailText = getMailText(i);
-        text.setText(mailText);
-        allTexts.append(tr("\n\n============================== " ) + QString::number(i) + tr(" ==============================\n"));
-        allTexts.append(getMailHeader(i));
-        allTexts.append(mailText);
-
-        /* Add content to message. */
-        message.addPart(&text);
-
-        /* Add attachments. */
-        foreach(MimeAttachment *att, attachments){
-            message.addPart(att);
-        }
-
-        /* Try to send the mail. If failed, keep track of this. */
-        if(!sendMail(&message)){
-            failed += tr("  ") + recv_mail + tr("\n");
-            nFailed++;
-            continue;
-        }
-
-        success += tr("  ") + recv_mail + tr("\n");
-        nSuccess++;
-
-    }
-
-    QString res = tr("Number of mails: ") + QString::number(nMails) + tr(" mails.\n\n") +
-                  tr("Mails OK: ") + QString::number(nSuccess) + tr("\n\n") +
-                  tr("Mails Failed: ") + QString::number(nFailed) + tr("\n") + failed + tr("\n");
-
-    allTexts.prepend(tr("Report: ") + subject + tr("\n\n") + res + tr("\nData:"));
-    allTexts.append(tr("\n============================== END ==============================\n"));
-
-    /* Message and content. */
-    MimeMessage message;
-    MimeText text;
-
-    /* Set sender and receiver. */
-    message.setSender(&sender);
-    message.addRecipient(&sender);
-
-    /* Add bcc's */
-    //foreach(QString bcc, bcc_addresses){
-    //    message.addBcc(new EmailAddress(bcc));
-    //}
-
-    /* Add subject */
-    message.setSubject(tr("Report: ") + subject);
-
-    /* Add contents. */
-    text.setText(allTexts);
-
-    /* Add content to message. */
-    message.addPart(&text);
-
-    /* Add attachments. */
-    foreach(MimeAttachment *att, attachments){
-        message.addPart(att);
-    }
-
-    sendMail(&message);
-
-    /* Give information. */
-    QMessageBox::information(this, tr("Info:"), res);
-
-    /* Cleanup attachments*/
-    foreach(QFile *f, attachmentFiles){
-        delete f;
-    }
-    foreach(MimeAttachment *att, attachments){
-        delete att;
-    }
-}
-
-bool MainWindow::sendMail(MimeMessage *m){
-
-    bool ret = false;
-
-    if(DO_NOT_SEND_EMAILS){
-        return false;
-    }
-
-    try {
-        ret = m_SMTPConnection->sendMail(*m);
-    }
-    catch (...){
-        ret = false;
-    }
-
-    return ret;
-}
-
+/*
+ * [2] General methods.
+ */
+
+/* Return textversion of mail header. */
 QString MainWindow::getMailHeader(int offset){
 
     QString txt;
@@ -1246,7 +648,7 @@ QString MainWindow::getMailHeader(int offset){
     }
     txt += tr("Subject: [") + m_courseCode->text() + tr("] ") + m_emailSubject->text() + tr("\n");
     for(int i = 0; i < m_attachments->count(); i++){
-        txt += tr("Attachment: ") + m_attachments->itemData(i).toString() + tr("\n");
+        txt += tr("Attachment: ") + m_attachments->itemText(i) + tr("\n");
     }
     txt += tr("\n\n");
 
@@ -1370,7 +772,7 @@ QString MainWindow::getData(int row, int col){
      * Check row and col, if we have a proper spreadsheet and
      * if the value is in range. Return invalid if not.
      */
-    if(row < 0 || col < 0 || d == NULL || d->model() == NULL || col > d->model()->columnCount() || row > d->model()->rowCount()){
+    if(row < 0 || col < 0 || d == NULL || m_xlsxTab->currentIndex() == 0 || d->model() == NULL || col > d->model()->columnCount() || row > d->model()->rowCount()){
         return QString("[INV_REF!]");
     }
 
@@ -1378,10 +780,530 @@ QString MainWindow::getData(int row, int col){
     return(d->model()->data(d->model()->index(row-1, col-1)).toString());
 }
 
+/* Validate email address. */
+bool MainWindow::isValidEmail(QString address){
+    return QRegExp("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63}", Qt::CaseInsensitive).exactMatch(address);
+}
+
+/* Validate HR student email address. */
+bool MainWindow::isValidHRStudentEmail(QString address){
+    return QRegExp("\\d{7}@hr.nl", Qt::CaseInsensitive).exactMatch(address);
+}
+
+/* Validate HR employee email address. */
+bool MainWindow::isValidHREmployeeEmail(QString address){
+    return QRegExp("[a-z]{5}@hr.nl", Qt::CaseInsensitive).exactMatch(address);
+}
+
+/*
+ * [3] Save/load/delete Settings.
+ */
+
+/* Save settings. */
+void MainWindow::saveSettings(){
+
+    /* Get settings. */
+    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
+
+    /* Settings parameters. */
+    s->setValue(tr("saveOnExit"), m_saveOnExitCheckBox->isChecked());
+    s->setValue(tr("validateHR"), m_validateHR->isChecked());
+    s->setValue(tr("runtimeValidate"), m_runtimeValidate->isChecked());
+
+    /* Email parameters. */
+    s->setValue(tr("senderName"), m_senderName->text());
+    s->setValue(tr("senderEmail"), m_senderEmail->text());
+    s->setValue(tr("emailBcc"), m_emailBcc->text());
+    s->setValue(tr("emailSubject"), m_emailSubject->text());
+    s->setValue(tr("emailAppend"), m_emailAppendText->text());
+    s->setValue(tr("courseCode"), m_courseCode->text());
+    s->setValue(tr("SMTPserver"), m_SMTPserver->text());
+    s->setValue(tr("SMTPport"), m_SMTPport->text());
+    s->setValue(tr("SMTPtype"), m_SMTPtype->currentText());
+
+    /* Texts. */
+    s->beginWriteArray(tr("mailTexts"));
+    int index = 0;
+    for(int i = 0; i < m_textTab->count(); i++){
+        if(QTextEdit *te = qobject_cast<QTextEdit*>(m_textTab->widget(i))){
+            if(!te->toPlainText().isEmpty()){
+                s->setArrayIndex(index);
+                s->setValue(tr("name"), m_textTab->tabText(i));
+                s->setValue(tr("text"), te->toPlainText());
+                index++;
+            }
+        }
+    }
+    s->endArray();
+
+    /* Save. */
+    s->sync();
+}
+
+/* Load settings. */
+void MainWindow::loadSettings(){
+
+    /* Get settings. */
+    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
+
+    /* Settings parameters. */
+    m_saveOnExitCheckBox->setChecked(s->value(tr("saveOnExit"), QVariant(false)).toBool());
+    m_validateHR->setChecked(s->value(tr("validateHR"), QVariant(true)).toBool());
+    m_runtimeValidate->setChecked(s->value(tr("runtimeValidate"), QVariant(true)).toBool());
+
+    /* Email parameters. */
+    m_senderName->setText(s->value(tr("senderName"), tr("")).toString());
+    m_senderEmail->setText(s->value(tr("senderEmail"), tr("")).toString());
+    m_emailBcc->setText(s->value(tr("emailBcc"), tr("")).toString());
+    m_emailSubject->setText(s->value(tr("emailSubject"), tr("")).toString());
+    m_emailAppendText->setText(s->value(tr("emailAppend"), tr("@hr.nl")).toString());
+    m_courseCode->setText(s->value(tr("courseCode"), tr("")).toString());
+    m_SMTPserver->setText(s->value(tr("SMTPserver"), tr("smtp.hr.nl")).toString());
+    m_SMTPport->setText(s->value(tr("SMTPport"), tr("465")).toString());
+    m_SMTPtype->setCurrentText(s->value(tr("SMTPtype"), tr("SSL")).toString());
+
+    /* Texts. */
+    int num = s->beginReadArray(tr("mailTexts"));
+    for(int i = 0; i < num; i++){
+        s->setArrayIndex(i);
+        QString name = s->value(tr("name"), tr("unknown")).toString();
+        addNewTextTab();
+        m_textTab->setTabText(m_textTab->currentIndex(), name);
+        ((QTextEdit*)m_textTab->currentWidget())->setText(s->value(tr("text"), tr("")).toString());
+    }
+    if(num == 0){
+        addNewTextTab();
+    }
+    s->endArray();
+
+}
+
+/* Delete saved settings to get a fresh application. */
+void MainWindow::deleteSettings(){
+
+    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
+
+    /* Sure? */
+    if(QMessageBox::question(this, tr("Delete all settings?"),
+                                   tr("Are you sure you want to delete all items and saved settings?\n"
+                                      "")
+                             ) != QMessageBox::Yes){
+        return;
+    }
+
+    /* Clear saved settings. */
+    s->clear();
+    s->sync();
+
+    /* Remove and delete all texts. */
+    int num = m_textTab->count() - 1;
+    for(int i = num; i >= 0; i--){
+        QTextEdit *te;
+        if((te = qobject_cast<QTextEdit*>(m_textTab->widget(i)))){
+            m_textTab->removeTab(i);
+            delete te;
+        }
+    }
+
+    /* Remove and delete all spreadsheet tabs. */
+    num = m_xlsxTab->count() - 1;
+    for(int i = num; i >= 0; i--){
+        QTableView *tv;
+        if((tv = qobject_cast<QTableView*>(m_xlsxTab->widget(i)))){
+            m_xlsxTab->removeTab(i);
+            delete tv;
+        }
+    }
+
+    /* Set default values. */
+    loadSettings();
+
+}
+
+/* When the application closes we might want to save the settings. */
+void MainWindow::closeEvent(QCloseEvent *closeEvent){
+
+    /* Should we save settings? */
+    if(m_saveOnExitCheckBox->isChecked()){
+        QMessageBox::StandardButton answer = QMessageBox::question(this,
+                                                                   tr("Save settings?"),
+                                                                   tr("Do you want to save your email texts and general parameters?\n"),
+                                                                   QMessageBox::Cancel | QMessageBox::No | QMessageBox::Yes,
+                                                                   QMessageBox::Cancel);
+        /* Do not close. */
+        if(answer == QMessageBox::Cancel){
+            closeEvent->ignore();
+            return;
+        }
+
+        /* Close without saving. */
+        if(answer == QMessageBox::No){
+            closeEvent->accept();
+            return;
+        }
+    }
+
+    /* Save */
+    saveSettings();
+
+    /* Close */
+    closeEvent->accept();
+
+}
+
+/*
+ * [4] Show/hide widgets.
+ */
+
+/* Show/hide the settingsWidget. */
+void MainWindow::toggleSettingsWidget(bool s){
+
+    if(!s){
+        /* Hide */
+        m_toggleSettingsAnimation->setStartValue(400);
+        m_toggleSettingsAnimation->setEndValue(0);
+        m_settingsWidgetToggleButton->setText(tr(">"));
+        m_settingsWidgetToggleButton->setToolTip(tr("Show settings"));
+    }
+    else{
+        /* Show. */
+        m_toggleSettingsAnimation->setStartValue(0);
+        m_toggleSettingsAnimation->setEndValue(400);
+        m_settingsWidgetToggleButton->setText(tr("<"));
+        m_settingsWidgetToggleButton->setToolTip(tr("Hide settings"));
+    }
+
+    m_toggleSettingsAnimation->start();
+
+}
+
+/* Show/hide the SMTPWidget. */
+void MainWindow::toggleSMTPWidget(bool s){
+
+    if(!s){
+        /* Hide */
+        m_toggleSMTPAnimation->setStartValue(400);
+        m_toggleSMTPAnimation->setEndValue(0);
+        m_SMTPWidgetToggleButton->setText(tr("<"));
+        m_SMTPWidgetToggleButton->setToolTip(tr("Show SMTP options"));
+    }
+    else{
+        /* Show. */
+        m_toggleSMTPAnimation->setStartValue(0);
+        m_toggleSMTPAnimation->setEndValue(400);
+        m_SMTPWidgetToggleButton->setText(tr(">"));
+        m_SMTPWidgetToggleButton->setToolTip(tr("Hide SMTP options"));
+    }
+
+    m_toggleSMTPAnimation->start();
+
+}
+
+/* Show/hide the generateWidget. */
+void MainWindow::toggleGenerateWidget(bool s){
+
+    if(!s){
+        /* Hide. */
+        m_toggleGenerateAnimation->setStartValue(400);
+        m_toggleGenerateAnimation->setEndValue(0);
+        m_generateWidgetToggleButton->setText(tr("<"));
+        m_generateWidgetToggleButton->setToolTip(tr("Show options"));
+    }
+    else{
+        /* Show. */
+        m_toggleGenerateAnimation->setStartValue(0);
+        m_toggleGenerateAnimation->setEndValue(400);
+        m_generateWidgetToggleButton->setText(tr(">"));
+        m_generateWidgetToggleButton->setToolTip(tr("Hide options"));
+    }
+
+    /* Start animation. */
+    m_toggleGenerateAnimation->start();
+
+}
+
+/*
+ *  [5] Update.
+ */
+
+/* Add attachment file dialog. */
+void MainWindow::addAttachment(){
+
+    /* Ask for the file. */
+    QString filePath = QFileDialog::getOpenFileName(this, "Select file");
+    if(filePath.isEmpty()){
+        return;
+    }
+
+    /* Get info. */
+    QFileInfo fInfo = QFileInfo(filePath);
+
+    /* Add filename to the list of attachments. */
+    m_attachments->addItem(fInfo.fileName(), filePath);
+    m_attachments->setItemData(m_attachments->count() - 1, tr("Size: ") + QString::number(fInfo.size()/1024) + tr("kB.\nFull path:\n") + filePath + tr("\n"), Qt::ToolTipRole);
+
+}
+
+/* Delete attachment from list. */
+void MainWindow::deleteAttachment(){
+
+    /* Is there something to delete? */
+    if(m_attachments->currentText().isEmpty()){
+        return;
+    }
+
+    /* Sure to delete? */
+    if(QMessageBox::question(this, tr("Remove Attachment?"),
+                                   tr("Are you sure you want to remove the attachment \"") +
+                                   m_attachments->currentText() + tr("\"?\n") +
+                                   tr("\nFull path:\n") + m_attachments->currentData().toString() + tr("\n")
+                             ) != QMessageBox::Yes){
+        return;
+    }
+
+    /* Ok, then delete it. */
+    m_attachments->removeItem(m_attachments->currentIndex());
+
+}
+
+/* Load an xlsx sheet */
+void MainWindow::loadSheet(){
+
+    /* Ask for the file. */
+    QString filePath = QFileDialog::getOpenFileName(0, "Open xlsx file", QString(), "*.xlsx");
+    if(filePath.isEmpty()){
+        return;
+    }
+
+    /* Open the document. */
+    QXlsx::Document *xlsx = new QXlsx::Document(filePath, m_xlsxTab);
+
+    /* Add add sheets (tabs) to the viewer. */
+    foreach(QString sheetName, xlsx->sheetNames()){
+
+        /* Load sheet */
+        QXlsx::Worksheet *sheet = dynamic_cast<QXlsx::Worksheet *>(xlsx->sheet(sheetName));
+        if(sheet){
+
+            /* Create a tableview for this sheet. */
+            QTableView *view = new QTableView(m_xlsxTab);
+            view->setToolTip(tr("This is the data (read-only) from the selected sheet\n"
+                                "that will be used to generate the e-mail from."));
+
+            /* Set to read-only. */
+            view->setEditTriggers(QAbstractItemView::NoEditTriggers);
+            view->setModel(new QXlsx::SheetModel(sheet, view));
+
+            /* Handle merged cells. */
+            foreach (QXlsx::CellRange range, sheet->mergedCells()){
+                view->setSpan(range.firstRow()-1, range.firstColumn()-1, range.rowCount(), range.columnCount());
+            }
+
+            /* Add sheet as a tab to viewer. */
+            int tabIndex = m_xlsxTab->addTab(view, sheetName);
+            m_xlsxTab->setCurrentIndex(tabIndex);
+        }
+    }
+
+}
+
+/* Slot called when selecting an onther sheet. */
+void MainWindow::updateSheet(){
+
+    /* Get a pointer to the data. */
+    QTableView *d = (QTableView*)m_xlsxTab->currentWidget();
+
+    /* Extract columns and rows. */
+    QStringList columnNames;
+    QStringList rowNames;
+    if(d != NULL && m_xlsxTab->currentIndex() != 0){
+        for(int i = 0; i < d->model()->columnCount(); i++){
+            columnNames.append(d->model()->headerData(i, Qt::Horizontal).toString());
+        }
+        for(int i = 1; i <= d->model()->rowCount(); i++){
+            rowNames.append(QString::number(i));
+        }
+    }
+
+    /* Insert extracted values into selection boxes. */
+    QString tmp = m_emailColumnSelect->currentText();
+    m_emailColumnSelect->clear();
+    m_emailColumnSelect->addItems(columnNames);
+    m_emailColumnSelect->setCurrentText(tmp);
+
+    /* Now do those who may be ignored. */
+    columnNames.prepend(tr("<none>"));
+    rowNames.prepend(tr("<none>"));
+
+    QComboBox *cols[] = {m_nameColSelect, m_finalGradeColSelect, m_startColSelect, m_stopColSelect};
+    for(int i = 0; i < 4; i++){
+        QComboBox *c = cols[i];
+        QString tmp = c->currentText();
+        c->clear();
+        c->addItems(columnNames);
+        c->setCurrentText(tmp);
+    }
+
+    QComboBox *rows[] = {m_headerRowSelect, m_maxRowSelect};
+    for(int i = 0; i < 2; i++){
+        QComboBox *c = rows[i];
+        QString tmp = c->currentText();
+        c->clear();
+        c->addItems(rowNames);
+        c->setCurrentText(tmp);
+    }
+
+    /* Reload values. */
+    updateInfo();
+
+}
+
+/* Update dependend items when values change. */
+void MainWindow::updateInfo(){
+    /* Block (circular) updates. */
+    blockRowSignals(true);
+
+    /* Get pointer to data and find values. */
+    QTableView *d = (QTableView*)m_xlsxTab->currentWidget();
+    int max = 0;
+    int start = 1;
+    int stop = max;
+    int preview = 1;
+
+    if(d != NULL && m_xlsxTab->currentIndex() != 0){
+        max = d->model()->rowCount();
+        stop = max;
+    }
+
+    if(!m_firstRowSelect->currentText().isEmpty()){
+        start = m_firstRowSelect->currentText().toInt();
+    }
+    if(!m_lastRowSelect->currentText().isEmpty()){
+        stop = m_lastRowSelect->currentText().toInt();
+    }
+    if(!m_previewSelect->currentText().isEmpty()){
+        preview = m_previewSelect->currentText().toInt();
+    }
+
+    /* Remove items from selection boxes. */
+    m_firstRowSelect->clear();
+    m_lastRowSelect->clear();
+    m_previewSelect->clear();
+
+    /* Insert new items to selection boxes. */
+    for(int i = 1; i <= max; i++){
+        m_firstRowSelect->addItem(QString::number(i));
+        if(i >= start && i <= stop){
+            m_previewSelect->addItem(QString::number(i));
+        }
+        if(i >= start){
+            m_lastRowSelect->addItem(QString::number(i));
+        }
+    }
+
+    /* Set old values if useful. */
+    m_firstRowSelect->setCurrentText(QString::number(start));
+    if(stop >= start){
+        m_lastRowSelect->setCurrentText(QString::number(stop));
+    }
+    else{
+        m_lastRowSelect->setCurrentText(QString::number(max));
+    }
+    m_previewSelect->setCurrentText(QString::number(preview));
+
+    /* Re-enable updates. */
+    blockRowSignals(false);
+
+    /* Calculate and set number of generated mails. */
+    if(max > 0){
+        m_nMailsDisplay->display(m_lastRowSelect->currentText().toInt() - m_firstRowSelect->currentText().toInt() + 1);
+    }
+    else{
+        m_nMailsDisplay->display(0);
+    }
+
+    /* Update preview text. */
+    updateText();
+
+}
+
+/* Update and parse values. */
+void MainWindow::updateText(){
+
+    QStringList bcc_addresses = m_emailBcc->text().split(";");
+
+    /* Generate preview text. */
+    QString res;
+
+    /* Get the mail number. */
+    int offset = m_previewSelect->currentText().toInt();
+
+    if(m_runtimeValidate->isChecked()){
+        /* Check option fields and make red when useless. */
+        !isValidEmail(m_senderEmail->text()) ? m_senderEmail->setStyleSheet(tr("background-color: #FF9999;")) :
+                                               m_senderEmail->setStyleSheet(tr(""));
+
+        if(m_validateHR->isChecked()){
+            !isValidHREmployeeEmail(m_senderEmail->text()) ? m_senderEmail->setStyleSheet(tr("background-color: #FF9999;")) :
+                                                            m_senderEmail->setStyleSheet(tr(""));
+        }
+
+        m_emailSubject->text().length() < 3  ? m_emailSubject->setStyleSheet(tr("background-color: #FF9999;")) :
+                                               m_emailSubject->setStyleSheet(tr(""));
+
+        m_courseCode->text().length() < 3    ? m_courseCode->setStyleSheet(tr("background-color: #FF9999;")) :
+                                               m_courseCode->setStyleSheet(tr(""));
+
+        m_xlsxTab->count() < 2               ? m_loadXlsxFileButton->setStyleSheet(tr("background-color: #FF9999;")) :
+                                               m_loadXlsxFileButton->setStyleSheet(tr(""));
+
+        foreach(QString bcc, bcc_addresses){
+            !bcc.isEmpty() && !isValidEmail(bcc) ? m_emailBcc->setStyleSheet(tr("background-color: #FF9999;")) :
+                                                   m_emailBcc->setStyleSheet(tr(""));
+        }
+    }
+    else{
+        m_senderEmail->setStyleSheet(tr(""));
+        m_emailSubject->setStyleSheet(tr(""));
+        m_courseCode->setStyleSheet(tr(""));
+        m_loadXlsxFileButton->setStyleSheet(tr(""));
+        m_emailBcc->setStyleSheet(tr(""));
+    }
+
+    /* Get the main contents. */
+    res += getMailHeader(offset);
+    res += getMailText(offset);
+
+    /* set text to preview. */
+    m_previewText->setText(res);
+
+}
+
+/* Hacky thing to avoid circular updates when loading new values into the selection boxes. */
+void MainWindow::blockRowSignals(bool b){
+
+    m_firstRowSelect->blockSignals(b);
+    m_lastRowSelect->blockSignals(b);
+    m_previewSelect->blockSignals(b);
+
+}
+
+/*
+ * [6] Generate mail contents.
+ */
+
 /* Add new composer tab and make it active. */
 void MainWindow::addNewTextTab(){
 
     QTextEdit *newText = new QTextEdit(this);
+    newText->setToolTip(tr("In this box you can type any text you want as a\n"
+                           "template for the generated emails.\n\n"
+                           "Text between ## will be parsed from the selected\n"
+                           "spreadsheet as follows:\n"
+                           " #A#  will include the value in column A. It will be\n"
+                           "      different for all emails.\n"
+                           " #A1# will include the cell A1 in the emails. It will\n"
+                           "      be the same in all emails."));
     connect(newText, SIGNAL(textChanged()), this, SLOT(updateText()));
 
     int num = m_textTab->count() - 1;
@@ -1403,23 +1325,6 @@ void MainWindow::addNewTextTab(){
     m_textTab->addTab(newText, tr("T") + QString::number(newNum));
     m_textTab->setCurrentWidget(newText);
 
-}
-
-/* Rename a tab in the editor. */
-void MainWindow::renameTab(int index){
-
-    /* Get the calling tabWidget. */
-    QTabWidget *tw = (QTabWidget*)this->sender();
-
-    /* Ask for new name. */
-    bool ok;
-    QString oldname = tw->tabText(index);
-    QString name = QInputDialog::getText(this, tr("Set new name for tab:"), tr("New name:"), QLineEdit::Normal, oldname, &ok);
-
-    /* If ok, then rename. */
-    if(ok){
-        tw->setTabText(index, name);
-    }
 }
 
 /* Generate template based on selected rows and columns. */
@@ -1494,6 +1399,11 @@ void MainWindow::generateText(bool newTab){
     txt += tr("\n");
     txt += tr("Met vriendelijke groet,\n\n") + m_senderName->text() + tr("\n");
 
+    /* Disclaimer. */
+    txt += tr("\n[This message was generated using ") + APPLICATION_NAME +
+           tr(" (") + APPLICATION_URL + tr(") and is intended as informative only. ") +
+           tr("No rights can be claimed based on the contents of this message.]\n");
+
     /* Create new tab? */
     if(newTab){
         addNewTextTab();
@@ -1507,130 +1417,447 @@ void MainWindow::generateText(bool newTab){
 
 }
 
-/* Validate email address. */
-bool MainWindow::isValidEmail(QString address){
-    return QRegExp("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63}", Qt::CaseInsensitive).exactMatch(address);
-}
+/*
+ * [7] Close or rename a tab in the XLSX viewer or the Editor.
+ */
 
-/* Validate HR student email address. */
-bool MainWindow::isValidHRStudentEmail(QString address){
-    return QRegExp("\\d{7}@hr.nl", Qt::CaseInsensitive).exactMatch(address);
-}
+/* Close tab in a tabwidget */
+void MainWindow::closeTab(int index){
 
-/* Validate HR employee email address. */
-bool MainWindow::isValidHREmployeeEmail(QString address){
-    return QRegExp("[a-z]{5}@hr.nl", Qt::CaseInsensitive).exactMatch(address);
-}
+    /* Get the tabwidget */
+    QTabWidget *tw = (QTabWidget*)sender();
 
-/* Save settings. */
-void MainWindow::saveSettings(){
+    /* Get the tab. */
+    QWidget *tab = tw->widget(index);
 
-    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
-
-    s->setValue(tr("saveOnExit"), m_saveOnExitCheckBox->isChecked());
-    s->setValue(tr("validateHR"), m_validateHR->isChecked());
-    s->setValue(tr("runtimeValidate"), m_runtimeValidate->isChecked());
-
-    s->setValue(tr("senderName"), m_senderName->text());
-    s->setValue(tr("senderEmail"), m_senderEmail->text());
-    s->setValue(tr("emailBcc"), m_emailBcc->text());
-    s->setValue(tr("emailSubject"), m_emailSubject->text());
-    s->setValue(tr("emailAppend"), m_emailAppendText->text());
-    s->setValue(tr("courseCode"), m_courseCode->text());
-    s->setValue(tr("SMTPserver"), m_SMTPserver->text());
-    s->setValue(tr("SMTPport"), m_SMTPport->text());
-    s->setValue(tr("SMTPtype"), m_SMTPtype->currentText());
-
-    s->beginWriteArray(tr("mailTexts"));
-    int index = 0;
-    for(int i = 0; i < m_textTab->count(); i++){
-        if(QTextEdit *te = qobject_cast<QTextEdit*>(m_textTab->widget(i))){
-            if(!te->toPlainText().isEmpty()){
-                s->setArrayIndex(index);
-                s->setValue(tr("name"), m_textTab->tabText(i));
-                s->setValue(tr("text"), te->toPlainText());
-                index++;
-            }
-        }
+    /* The editor cannot have 0 tabs. */
+    if(tw == m_textTab && tw->count() < 3){
+        return;
     }
-    s->endArray();
-
-    s->sync();
-}
-
-void MainWindow::loadSettings(){
-
-    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
-
-    m_saveOnExitCheckBox->setChecked(s->value(tr("saveOnExit"), QVariant(false)).toBool());
-    m_validateHR->setChecked(s->value(tr("validateHR"), QVariant(true)).toBool());
-    m_runtimeValidate->setChecked(s->value(tr("runtimeValidate"), QVariant(true)).toBool());
-
-    m_senderName->setText(s->value(tr("senderName"), tr("")).toString());
-    m_senderEmail->setText(s->value(tr("senderEmail"), tr("")).toString());
-    m_emailBcc->setText(s->value(tr("emailBcc"), tr("")).toString());
-    m_emailSubject->setText(s->value(tr("emailSubject"), tr("")).toString());
-    m_emailAppendText->setText(s->value(tr("emailAppend"), tr("@hr.nl")).toString());
-    m_courseCode->setText(s->value(tr("courseCode"), tr("")).toString());
-    m_SMTPserver->setText(s->value(tr("SMTPserver"), tr("smtp.hr.nl")).toString());
-    m_SMTPport->setText(s->value(tr("SMTPport"), tr("465")).toString());
-    m_SMTPtype->setCurrentText(s->value(tr("SMTPtype"), tr("SSL")).toString());
-
-    int num = s->beginReadArray(tr("mailTexts"));
-    for(int i = 0; i < num; i++){
-        s->setArrayIndex(i);
-        QString name = s->value(tr("name"), tr("unknown")).toString();
-        addNewTextTab();
-        qDebug() << i << name << m_textTab->currentIndex() << endl;
-        m_textTab->setTabText(m_textTab->currentIndex(), name);
-        ((QTextEdit*)m_textTab->currentWidget())->setText(s->value(tr("text"), tr("")).toString());
-    }
-    if(num == 0){
-        addNewTextTab();
-    }
-    s->endArray();
-
-}
-
-void MainWindow::deleteSettings(){
-
-    QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
 
     /* Sure? */
-    if(QMessageBox::question(this, tr("Delete all settings?"),
-                                   tr("Are you sure you want to delete all items and saved settings?\n"
-                                      "")
+    if(QMessageBox::question(this, tr("Close tab?"),
+                                   tr("Are you sure you want to close the tab \"") +
+                                   tw->tabText(index) +
+                                   tr("\"?")
                              ) != QMessageBox::Yes){
         return;
     }
 
-    /* Clear saved settings. */
-    s->clear();
-    s->sync();
+    /* Remove and delete tab. */
+    tw->removeTab(index);
+    delete tab;
 
-    /* Remove and delete all texts. */
-    int num = m_textTab->count() - 1;
-    for(int i = num; i >= 0; i--){
-        QTextEdit *te;
-        if((te = qobject_cast<QTextEdit*>(m_textTab->widget(i)))){
-            m_textTab->removeTab(i);
-            delete te;
-        }
-    }
-
-    /* Remove and delete all spreadsheet tabs. */
-    num = m_xlsxTab->count() - 1;
-    for(int i = num; i >= 0; i--){
-        QTableView *tv;
-        if((tv = qobject_cast<QTableView*>(m_xlsxTab->widget(i)))){
-            m_xlsxTab->removeTab(i);
-            delete tv;
-        }
-    }
-
-    /* Set default values. */
-    loadSettings();
 }
+
+/* Rename a tab in the editor. */
+void MainWindow::renameTab(int index){
+
+    /* Get the calling tabWidget. */
+    QTabWidget *tw = (QTabWidget*)this->sender();
+
+    if(index == 0){
+        return;
+    }
+
+    /* Ask for new name. */
+    bool ok;
+    QString oldname = tw->tabText(index);
+    QString name = QInputDialog::getText(this, tr("Set new name for tab:"), tr("New name:"), QLineEdit::Normal, oldname, &ok);
+
+    /* If ok, then rename. */
+    if(ok && !name.isEmpty()){
+        tw->setTabText(index, name);
+    }
+}
+
+/*
+ * [8] SMTP.
+ */
+
+/* Connect to SMTP server. */
+void MainWindow::SMTPconnect(){
+    bool ok;
+
+    /* Get servername. */
+    QString smtpServer = m_SMTPserver->text();
+
+    /* Get portnumber. */
+    int smtpPort = m_SMTPport->text().toInt();
+
+    /* Get connection type. */
+    SmtpClient::ConnectionType smtpType = static_cast<SmtpClient::ConnectionType>(m_SMTPtype->currentData().toInt());
+
+    /* Lib likes to throw exceptions... */
+    try {
+        /* Try to set values. */
+        m_SMTPConnection = new SmtpClient(smtpServer, smtpPort, smtpType);
+    }
+    catch (...){
+
+    }
+
+    /*
+     * Get login name for SMTP server.
+     *
+     * Default is the sender email address.
+     */
+    QString user = QInputDialog::getText(this, tr("Username:"),
+                                           tr("SMTP username for ") + smtpServer +
+                                           tr(":") + QString::number(smtpPort),
+                                           QLineEdit::Normal, m_senderEmail->text(),
+                                         &ok);
+
+    /* Value not empty and user dit not press close or cancel? */
+    if(!ok || user.isEmpty()){
+        SMTPdisconnect();
+        return;
+    }
+
+    /* Ask for SMTP password. */
+    QString password = QInputDialog::getText(this, tr("Password:"),
+                                               tr("SMTP Password for <") + user +
+                                               tr(">@") + smtpServer +
+                                               tr(":") + QString::number(smtpPort),
+                                               QLineEdit::Password, tr(""),
+                                             &ok);
+
+    /* Value not empty and user dit not press close or cancel? */
+    if(!ok || password.isEmpty()){
+        SMTPdisconnect();
+        return;
+    }
+
+    /* Set username and password. */
+    m_SMTPConnection->setUser(user);
+    m_SMTPConnection->setPassword(password);
+
+    /* Lib throws exceptions... */
+    try {
+        /* Connect to SMTP server. */
+        if(!m_SMTPConnection->connectToHost()){
+            QMessageBox::warning(this, tr("SMTP Connect"), tr("Could not connect to SMTP server!"));
+            SMTPdisconnect();
+            return;
+        }
+
+        /* Login. */
+        if(!m_SMTPConnection->login()){
+            QMessageBox::warning(this, tr("SMTP Connect"), tr("SMTP login failed! Wrong username/password."));
+            SMTPdisconnect();
+            return;
+        }
+    }
+    catch (...){
+
+    }
+
+}
+
+/* Disconnect. */
+void MainWindow::SMTPdisconnect(){
+    if(m_SMTPConnection != NULL){
+
+        /* Should include this, but throws uncatchable exceptions. */
+        //m_smtp->quit();
+
+        delete m_SMTPConnection;
+    }
+
+    /* Set to NULL for next connect. */
+    m_SMTPConnection = NULL;
+}
+
+/* The main thing.. Sending emails. */
+void MainWindow::sendMails(){
+
+    /* Display Progress. */
+    QLabel progress(this);
+    progress.setText(tr("Checking parameters..."));
+    progress.setFixedSize(this->width(), this->height());
+    progress.setAlignment(Qt::AlignCenter);
+    progress.setAutoFillBackground(true);
+    progress.setFrameShape(QFrame::StyledPanel);
+    progress.show();
+    qApp->processEvents();
+
+    /* Read start/stop rows and calculate number of mails. */
+    int start = m_firstRowSelect->currentText().toInt();
+    int stop = m_lastRowSelect->currentText().toInt();
+    int nMails = stop - start + 1;
+
+    MimeMessage messages[nMails];
+    MimeText texts[nMails];
+    EmailAddress sender(tr(""));
+
+    /* Check sender. */
+    QString fromEmail = m_senderEmail->text();
+    if(!isValidEmail(fromEmail)){
+        QMessageBox::warning(this, tr("Error:"), tr("Sender email address is invalid!"));
+        m_senderEmail->setFocus();
+        return;
+    }
+    sender.setAddress(fromEmail);
+
+    /* Use name or email address as sender. */
+    QString fromName = m_senderName->text();
+    if(fromName.isEmpty()){
+        fromName = fromEmail;
+    }
+    sender.setName(fromName);
+
+    /* Check course code. */
+    QString coursecode = m_courseCode->text();
+    if(coursecode.length() < 2){
+        QMessageBox::warning(this, tr("Error:"), tr("Course code cannot be less than 2 characters!"));
+        m_courseCode->setFocus();
+        return;
+    }
+
+    /* Check subject. */
+    QString subject = tr("[") + coursecode + tr("] ") + m_emailSubject->text();
+    if(m_emailSubject->text().length() < 2){
+        QMessageBox::warning(this, tr("Error:"), tr("Subject cannot be less than 2 characters!"));
+        m_emailSubject->setFocus();
+        return;
+    }
+
+    /* Check if there are any messages to send. */
+    if(m_nMailsDisplay->value() == 0){
+        QMessageBox::warning(this, tr("Error:"), tr("The number of messages is 0!"));
+        return;
+    }
+
+    /* Get bcc addresses. */
+    QStringList bcc_addresses = m_emailBcc->text().split(";");
+    /* Check if the bcc's are OK. */
+    foreach(QString bcc, bcc_addresses){
+        if(bcc.isEmpty()){
+            bcc_addresses.removeAll(bcc);
+            continue;
+        }
+
+        if(!isValidEmail(bcc)){
+            QMessageBox::warning(this, tr("Error:"), tr("The bcc email address ") + bcc + tr(" is invalid!"));
+            m_emailBcc->setFocus();
+            return;
+        }
+    }
+
+    /* Get report cc addresses. */
+    QStringList report_cc_addresses = m_reportCC->text().split(";");
+    /* Check if the cc's are OK. */
+    foreach(QString cc, report_cc_addresses){
+        if(cc.isEmpty()){
+            report_cc_addresses.removeAll(cc);
+            continue;
+        }
+
+        if(!isValidEmail(cc)){
+            QMessageBox::warning(this, tr("Error:"), tr("The Report CC email address ") + cc + tr(" is invalid!"));
+            m_reportCC->setFocus();
+            return;
+        }
+    }
+
+    /* Read Attachments. */
+    QList<QFile*> attachmentFiles;
+    QList<MimeAttachment*> attachments;
+    for(int i = 0; i < m_attachments->count(); i++){
+        QString fileName = m_attachments->itemData(i).toString();
+        QFile *f = new QFile(fileName);
+        if(f->exists()){
+            MimeAttachment *att = new MimeAttachment(f);
+            attachments.append(att);
+        }
+        else{
+            QMessageBox::warning(this, tr("Error:"), tr("Attachment ") + fileName + tr(" can not be loaded!"));
+            return;
+        }
+    }
+
+    progress.setText("Checking messages...");
+    qApp->processEvents();
+
+    /* Check and generate mails. */
+    for(int i = 0; i < nMails; i++){
+        int index = start + i;
+
+        /* Recipient address OK? */
+        QString recv_mail = getData(m_emailColumnSelect->currentText(), index) + m_emailAppendText->text();
+        if(!isValidEmail(recv_mail)){
+            QMessageBox::warning(this, tr("Error:"), tr("The email address ") + recv_mail +
+                                 tr(" on line ") + QString::number(index) + tr(" is invalid!"));
+            m_emailColumnSelect->setFocus();
+            return;
+        }
+        if(m_validateHR->isChecked()){
+            if(!isValidHRStudentEmail(recv_mail)){
+                QMessageBox::warning(this, tr("Error:"), tr("The email address ") + recv_mail +
+                                     tr(" on line ") + QString::number(index) +
+                                     tr(" is not a valid HR student email address!"));
+                return;
+            }
+        }     
+        messages[i].addTo(new EmailAddress(recv_mail));
+
+        /* Mailtext OK? */
+        QString mailText = getMailText(index);
+        if(mailText.contains("[INV_REF!]")){
+            QMessageBox::warning(this, tr("Error:"), tr("There are invalid references in the mailtext of email ") +
+                                 QString::number(index) + tr("!"));
+            return;
+        }
+        texts[i].setText(mailText);
+        messages[i].addPart(&texts[i]);
+
+        /* Add subject. */
+        messages[i].setSubject(subject);
+
+        /* Add bcc's */
+        foreach(QString bcc, bcc_addresses){
+            messages[i].addBcc(new EmailAddress(bcc));
+        }
+
+        /* Add attachments. */
+        foreach(MimeAttachment *att, attachments){
+            messages[i].addPart(att);
+        }
+    }
+
+    /* Do we already have a connection? If not, connect. */
+    if(DO_NOT_SEND_EMAILS == 0 && m_SMTPConnection == NULL){
+        SMTPconnect();
+        if(m_SMTPConnection == NULL){
+            return;
+        }
+    }
+
+    /* Sure? */
+    if(QMessageBox::question(this, tr("Send Emails now?"),
+                                   tr("Are you sure you want to send ") +
+                                   QString::number(m_nMailsDisplay->value()) +
+                                   tr(" emails with the ") +
+                                   tr("subject \n\" [") + m_courseCode->text() + tr("] ") + m_emailSubject->text() + tr("\"\n") +
+                                   tr("and ") + QString::number(m_attachments->count()) + tr(" attachments now?")
+                             ) != QMessageBox::Yes){
+        return;
+    }
+
+    QString success;
+    int nSuccess = 0;
+    QString failed;
+    int nFailed = 0;
+    QString allTexts;
+
+    /* Send messages. */
+    for(int i = 0; i < nMails; i++){
+        int index = start + i;
+
+        progress.setText(tr("Sending message ") + QString::number(i) + tr(" / ") + QString::number(nMails) + tr("..."));
+        qApp->processEvents();
+
+        /* Add contents. */
+        allTexts.append(tr("\n\n============================== " ) + QString::number(index) + tr(" ==============================\n"));
+        allTexts.append(getMailHeader(index));
+        allTexts.append(texts[i].getText());
+
+        /* Try to send the mail. If failed, keep track of this. */
+        if(!sendMail(&messages[i])){
+            failed += tr("  ") + messages[i].getRecipients()[0]->getAddress() + tr("\n");
+            nFailed++;
+            continue;
+        }
+
+        success += tr("  ") + messages[i].getRecipients()[0]->getAddress() + tr("\n");
+        nSuccess++;
+
+    }
+
+    progress.setText(tr("Sending Report..."));
+    qApp->processEvents();
+
+    QString res = tr("Number of mails: ") + QString::number(nMails) + tr("\n\n") +
+                  tr("Mails OK: ") + QString::number(nSuccess) + tr("\n\n") +
+                  tr("Mails Failed: ") + QString::number(nFailed) + tr("\n") + failed + tr("\n");
+
+    allTexts.prepend(tr("Beste ") + m_senderName->text() + tr(",\n\n") +
+                     tr("Hierbij het rapport van ") + subject + tr("\n\n") +
+                     res + tr("\n"));
+    allTexts.append(tr("\n============================== END ==============================\n"));
+
+    /* Message and content. */
+    MimeMessage message;
+    MimeText text;
+
+    /* Set sender and receiver. */
+    message.setSender(&sender);
+    message.addRecipient(&sender);
+
+    /* Add cc's */
+    foreach(QString cc, report_cc_addresses){
+        message.addCc(new EmailAddress(cc));
+    }
+
+    /* Add subject */
+    message.setSubject(tr("Report: ") + subject);
+
+    /* Add contents. */
+    text.setText(allTexts);
+
+    /* Add content to message. */
+    message.addPart(&text);
+
+    /* Add attachments. */
+    foreach(MimeAttachment *att, attachments){
+        message.addPart(att);
+    }
+
+    sendMail(&message);
+
+    progress.setText(res);
+
+    /* Cleanup attachments. */
+    foreach(QFile *f, attachmentFiles){
+        delete f;
+    }
+    foreach(MimeAttachment *att, attachments){
+        delete att;
+    }
+
+    qDebug() << allTexts << endl;
+
+    /* Give information. */
+    QMessageBox::information(this, tr("Info:"), res);
+
+    progress.hide();
+
+}
+
+bool MainWindow::sendMail(MimeMessage *m){
+
+    bool ret = false;
+
+    /* For debugging. */
+    if(DO_NOT_SEND_EMAILS){
+        this->thread()->sleep(1);
+        return false;
+    }
+
+    try {
+        ret = m_SMTPConnection->sendMail(*m);
+    }
+    catch (...){
+        ret = false;
+    }
+
+    return ret;
+
+}
+
+/*
+ * [9] Dialogs.
+ */
 
 /* Create and show about dialog. */
 void MainWindow::about(){
@@ -1662,72 +1889,4 @@ void MainWindow::about(){
 #endif
 
                         );
-}
-
-void MainWindow::closeEvent(QCloseEvent *closeEvent){
-
-    if(m_saveOnExitCheckBox->isChecked()){
-        QMessageBox::StandardButton answer = QMessageBox::question(this,
-                                                                   tr("Save settings?"),
-                                                                   tr("Do you want to save your email texts and general parameters?\n"),
-                                                                   QMessageBox::Cancel | QMessageBox::No | QMessageBox::Yes,
-                                                                   QMessageBox::Cancel);
-        if(answer == QMessageBox::Cancel){
-            closeEvent->ignore();
-            return;
-        }
-        if(answer == QMessageBox::No){
-            closeEvent->accept();
-            return;
-        }
-    }
-
-    saveSettings();
-    closeEvent->accept();
-
-}
-
-void MainWindow::addAttachment(){
-    /* Ask for the file. */
-    QString filePath = QFileDialog::getOpenFileName(this, "Select file");
-    if(filePath.isEmpty()){
-        return;
-    }
-
-    QFileInfo fInfo = QFileInfo(filePath);
-
-    m_attachments->addItem(fInfo.fileName(), filePath);
-    m_attachments->setItemData(m_attachments->count() - 1, tr("Size: ") + QString::number(fInfo.size()/1024) + tr("kB.\nFull path:\n") + filePath + tr("\n"), Qt::ToolTipRole);
-}
-
-void MainWindow::deleteAttachment(){
-
-    if(m_attachments->currentText().isEmpty()){
-        return;
-    }
-
-    /* Sure? */
-    if(QMessageBox::question(this, tr("Remove Attachment?"),
-                                   tr("Are you sure you want to remove the attachment \"") +
-                                   m_attachments->currentText() + tr("\"?\n") +
-                                   tr("\nFull path:\n") + m_attachments->currentData().toString() + tr("\n")
-                             ) != QMessageBox::Yes){
-        return;
-    }
-
-    m_attachments->removeItem(m_attachments->currentIndex());
-
-}
-
-void MainWindow::test(){
-/*
-
-    for(int i = 1; i <= 30000; i++){
-        pd.setValue(i);
-        //pd.update();
-        //qDebug() << i << endl;
-        qApp->processEvents();
-
-    }
-    */
 }

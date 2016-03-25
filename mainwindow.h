@@ -19,8 +19,6 @@
 #include <mimetext.h>
 #include <mimeattachment.h>
 
-#include <QProgressDialog>
-
 /* Compile-time constant values. */
 #define APPLICATION_VERSION       "0.2"
 #define APPLICATION_NAME          "Qt XLSX Email Generator"
@@ -33,7 +31,8 @@
 #define APPLICATION_YEAR          "2016"
 #define APPLICATION_URL           "http://github.com/bakkerr/"
 
-#define DO_NOT_SEND_EMAILS 0
+/* Debugging. */
+#define DO_NOT_SEND_EMAILS 1
 
 /* MainWindow class. */
 class MainWindow : public QMainWindow
@@ -45,45 +44,59 @@ public:
     ~MainWindow();
 
 signals:
-    void mailProcessed(int index);
 
 /* Callback functions. */
 private slots:
 
-    /* Save/load/delete Settings. */
+    /* [3] Save/load/delete Settings. */
     void saveSettings();
     void loadSettings();
     void deleteSettings();
-    void addAttachment();
-    void deleteAttachment();
+    void closeEvent(QCloseEvent *closeEvent);
+
+    /* [4] Show/hide widgets. */
     void toggleSettingsWidget(bool b);
     void toggleSMTPWidget(bool b);
+    void toggleGenerateWidget(bool s);
 
-    /* When new sheet is loaded. */
+    /*
+     * [5] Update / load.
+     */
+
+    /* Add attachment. */
+    void addAttachment();
+
+    /* Delete Attachment. */
+    void deleteAttachment();
+
+    /* Load sheet dialog */
+    void loadSheet();
+
+    /* Slot called when selecting an onther sheet. */
     void updateSheet();
 
-    /* When fields are is updated. */
+    /* When fields are updated. */
     void updateInfo();
 
     /* When preview should be updated. */
     void updateText();
 
-    /* Load sheet dialog */
-    void loadSheet();
+    /* Update blocker when adding values to comboboxes. */
+    void blockRowSignals(bool b);
 
-    /* Generate mail contents. */
+    /* [6] Generate mail contents. */
     void addNewTextTab();
     void generateText(bool newTab);
     void generateNewText()     { generateText(true);  }
     void generateReplaceText() { generateText(false); }
-    void toggleGenerateWidget(bool s);
 
-    /* Close or rename a tab in the XLSX viewer or the Editor. */
+    /* [7] Close or rename a tab in the XLSX viewer or the Editor. */
     void closeTab(int index);
     void renameTab(int index);
 
-    /* Update blocker when adding values to comboboxes. */
-    void blockRowSignals(bool b);
+    /*
+     * [8] SMTP.
+     */
 
     /* Handle the SMTP (dis)connect. */
     void SMTPconnect();
@@ -93,34 +106,37 @@ private slots:
     void sendMails();
     bool sendMail(MimeMessage *m);
 
-    /* Show about dialog. */
+    /* [9] Show about dialog. */
     void about();
-
-    void closeEvent(QCloseEvent *closeEvent);
-
-    void test();
 
 private:
 
-    /* (Dock)widget generators. */
+    /*
+     * [1] UI generators.
+     */
+
+    /* Settings Dockwidget */
     void createGeneralOptionsWidget();
     void createSettingsWidget();
     void createSMTPWidget();
 
+    /* Editor Dockwidget */
     void createEditorWidget();
     void createGenerateWidget();
 
+    /* Preview Dockwidget */
     void createPreviewWidget();
-    void createRowSelectWidget();
+    void createMailSelectWidget();
 
+    /* Xlsx Viewer Dockwidget. */
     void createXlsxViewerWidget();
 
+    /* Toolbar */
     void createToolBar();
 
-    /* Valid email address? */
-    bool isValidEmail(QString address);
-    bool isValidHRStudentEmail(QString address);
-    bool isValidHREmployeeEmail(QString address);
+    /*
+     * [2] General methods.
+     */
 
     /* Generate mailtext or header from template */
     QString getMailHeader(int offset);
@@ -131,6 +147,15 @@ private:
 
     /* Extract data from spreadsheet. */
     QString getData(int row, int col);
+
+    /* Valid email address? */
+    bool isValidEmail(QString address);
+    bool isValidHRStudentEmail(QString address);
+    bool isValidHREmployeeEmail(QString address);
+
+    /*
+     * Private members.
+     */
 
     /* Dockwidgets */
     QDockWidget *m_generalOptionsDW;
@@ -144,6 +169,7 @@ private:
     /* General Options fields */
     QLineEdit *m_emailSubject;
     QLineEdit *m_emailBcc;
+    QLineEdit *m_reportCC;
     QLineEdit *m_senderName;
     QLineEdit *m_senderEmail;
     QLineEdit *m_courseCode;
@@ -168,7 +194,7 @@ private:
     QComboBox *m_SMTPtype;
 
     /* XLSX viewer. */
-    QPushButton *m_loadXlsxFileButton;
+    QToolButton *m_loadXlsxFileButton;
     QTabWidget *m_xlsxTab;
 
     /* Editor/Composer. */
