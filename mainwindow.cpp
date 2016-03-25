@@ -14,14 +14,16 @@
 #include <QMessageBox>
 
 #include <QToolBar>
-#include <QAction>
 #include <QToolButton>
+#include <QAction>
 
 #include <QRegExp>
 #include <QStringRef>
 
-#include <QtXlsx>
+#include <mimetext.h>
+#include <mimeattachment.h>
 
+#include <QtXlsx>
 #include "xlsxsheetmodel.h"
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -65,7 +67,7 @@ MainWindow::MainWindow(QWidget *parent) :
 /*
  * Destructor.
  *
- * TODO: clean-up properly.
+ * TODO: clean-up properly?
  */
 MainWindow::~MainWindow(){
 
@@ -130,7 +132,7 @@ void MainWindow::createGeneralOptionsWidget(){
     m_emailBcc->setValidator(new QRegExpValidator(QRegExp("(([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63})[;])*", Qt::CaseInsensitive), m_emailBcc));
     connect(m_emailBcc, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
 
-    /* Email bcc field. */
+    /* Report cc field. */
     m_reportCC = new QLineEdit(tr(""), generalOptionsWidget);
     m_reportCC->setToolTip(tr("Send a copy of the report to this address.\n"
                               "Multiple addresses may be added seperated by a ';' and\n"
@@ -510,7 +512,9 @@ void MainWindow::createMailSelectWidget(){
 
     /* Select the column where the email addresses are in. */
     m_emailColumnSelect = new QComboBox(m_rowSelectWidget);
-    m_emailColumnSelect->setToolTip(tr("Select the column for the\nemail address to use."));
+    m_emailColumnSelect->setToolTip(tr("Select the column for the\nemail address to use.\n"
+                                       "Note: this column in the spreadhseet\nshould be marked as text,\n"
+                                       "not as a number."));
     connect(m_emailColumnSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateText()));
 
     /* Option to append a value to the addresses in the spreadsheet. */
@@ -1300,10 +1304,14 @@ void MainWindow::addNewTextTab(){
                            "template for the generated emails.\n\n"
                            "Text between ## will be parsed from the selected\n"
                            "spreadsheet as follows:\n"
-                           " #A#  will include the value in column A. It will be\n"
-                           "      different for all emails.\n"
-                           " #A1# will include the cell A1 in the emails. It will\n"
-                           "      be the same in all emails."));
+                           " #A# \twill include the value in column A. It will be\n"
+                           "     \tdifferent for all emails.\n"
+                           " #A1#\twill include the cell A1 in the emails. It will\n"
+                           "     \tbe the same in all emails.\n\n"
+                           "Note:\n"
+                           "Only values will be read from the spreadsheet, not the formatting,\n"
+                           "so if you want to use rounded values use the ROUND() function\n"
+                           "before loading the spreadsheet."));
     connect(newText, SIGNAL(textChanged()), this, SLOT(updateText()));
 
     int num = m_textTab->count() - 1;
@@ -1357,11 +1365,6 @@ void MainWindow::generateText(bool newTab){
 
         txt += tr("is een #") + m_finalGradeColSelect->currentText() + tr("#");
 
-        /* Include maxpoints/default? */
-        if(maxpoints){
-            txt += tr("/#") + m_finalGradeColSelect->currentText() + m_maxRowSelect->currentText() + tr("#");
-        }
-
         txt += tr(".\n\n");
     }
 
@@ -1400,9 +1403,11 @@ void MainWindow::generateText(bool newTab){
     txt += tr("Met vriendelijke groet,\n\n") + m_senderName->text() + tr("\n");
 
     /* Disclaimer. */
-    txt += tr("\n[This message was generated using ") + APPLICATION_NAME +
-           tr(" (") + APPLICATION_URL + tr(") and is intended as informative only. ") +
-           tr("No rights can be claimed based on the contents of this message.]\n");
+    txt += tr("\n--\n"
+              "This message was automatically generated and is\n"
+              "intended to be informative only. No rights can be\n"
+              "claimed based on the contents of this message."
+              "\n--\n");
 
     /* Create new tab? */
     if(newTab){
@@ -1568,7 +1573,12 @@ void MainWindow::SMTPdisconnect(){
     m_SMTPConnection = NULL;
 }
 
-/* The main thing.. Sending emails. */
+/*
+ * The main thing.. Sending emails.
+ *
+ * TODO: A bit long and not very well structured.
+ *
+ */
 void MainWindow::sendMails(){
 
     /* Display Progress. */
@@ -1683,6 +1693,8 @@ void MainWindow::sendMails(){
     for(int i = 0; i < nMails; i++){
         int index = start + i;
 
+        messages[i].setSender(&sender);
+
         /* Recipient address OK? */
         QString recv_mail = getData(m_emailColumnSelect->currentText(), index) + m_emailAppendText->text();
         if(!isValidEmail(recv_mail)){
@@ -1725,6 +1737,9 @@ void MainWindow::sendMails(){
         }
     }
 
+    progress.setText("Connect to SMTP server...");
+    qApp->processEvents();
+
     /* Do we already have a connection? If not, connect. */
     if(DO_NOT_SEND_EMAILS == 0 && m_SMTPConnection == NULL){
         SMTPconnect();
@@ -1732,6 +1747,9 @@ void MainWindow::sendMails(){
             return;
         }
     }
+
+    progress.setText("Confirm...");
+    qApp->processEvents();
 
     /* Sure? */
     if(QMessageBox::question(this, tr("Send Emails now?"),
@@ -1774,6 +1792,7 @@ void MainWindow::sendMails(){
 
     }
 
+    /* Prepare report. */
     progress.setText(tr("Sending Report..."));
     qApp->processEvents();
 
@@ -1834,6 +1853,7 @@ void MainWindow::sendMails(){
 
 }
 
+/* Wrapper to send an email. */
 bool MainWindow::sendMail(MimeMessage *m){
 
     bool ret = false;
@@ -1841,6 +1861,10 @@ bool MainWindow::sendMail(MimeMessage *m){
     /* For debugging. */
     if(DO_NOT_SEND_EMAILS){
         this->thread()->sleep(1);
+        return false;
+    }
+
+    if(m_SMTPConnection == NULL){
         return false;
     }
 

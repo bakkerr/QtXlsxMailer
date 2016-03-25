@@ -16,8 +16,6 @@
 #include <QPropertyAnimation>
 
 #include <smtpclient.h>
-#include <mimetext.h>
-#include <mimeattachment.h>
 
 /* Compile-time constant values. */
 #define APPLICATION_VERSION       "0.2"
@@ -32,7 +30,7 @@
 #define APPLICATION_URL           "http://github.com/bakkerr/"
 
 /* Debugging. */
-#define DO_NOT_SEND_EMAILS 1
+#define DO_NOT_SEND_EMAILS 0
 
 /* MainWindow class. */
 class MainWindow : public QMainWindow
