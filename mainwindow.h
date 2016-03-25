@@ -17,6 +17,9 @@
 
 #include <smtpclient.h>
 #include <mimetext.h>
+#include <mimeattachment.h>
+
+#include <QProgressDialog>
 
 /* Compile-time constant values. */
 #define APPLICATION_VERSION       "0.2"
@@ -30,6 +33,8 @@
 #define APPLICATION_YEAR          "2016"
 #define APPLICATION_URL           "http://github.com/bakkerr/"
 
+#define DO_NOT_SEND_EMAILS 0
+
 /* MainWindow class. */
 class MainWindow : public QMainWindow
 {
@@ -39,6 +44,9 @@ public:
     explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
 
+signals:
+    void mailProcessed(int index);
+
 /* Callback functions. */
 private slots:
 
@@ -46,7 +54,10 @@ private slots:
     void saveSettings();
     void loadSettings();
     void deleteSettings();
+    void addAttachment();
+    void deleteAttachment();
     void toggleSettingsWidget(bool b);
+    void toggleSMTPWidget(bool b);
 
     /* When new sheet is loaded. */
     void updateSheet();
@@ -77,17 +88,20 @@ private slots:
     /* Handle the SMTP (dis)connect. */
     void SMTPconnect();
     void SMTPdisconnect();
-    void toggleSMTPWidget(bool b);
 
     /* The main thing... Sending mails */
     void sendMails();
+    bool sendMail(MimeMessage *m);
 
     /* Show about dialog. */
     void about();
 
     void closeEvent(QCloseEvent *closeEvent);
 
+    void test();
+
 private:
+
     /* (Dock)widget generators. */
     void createGeneralOptionsWidget();
     void createSettingsWidget();
@@ -101,14 +115,15 @@ private:
 
     void createXlsxViewerWidget();
 
-    QWidget *createInfoBar();
+    void createToolBar();
 
     /* Valid email address? */
     bool isValidEmail(QString address);
     bool isValidHRStudentEmail(QString address);
     bool isValidHREmployeeEmail(QString address);
 
-    /* Generate mailtext from template */
+    /* Generate mailtext or header from template */
+    QString getMailHeader(int offset);
     QString getMailText(int offset);
 
     /* Row and column parser */
@@ -132,6 +147,9 @@ private:
     QLineEdit *m_senderName;
     QLineEdit *m_senderEmail;
     QLineEdit *m_courseCode;
+    QPushButton *m_addAttachment;
+    QPushButton *m_deleteSelectedAttachment;
+    QComboBox *m_attachments;
 
     /* Settings settings. */
     QFrame *m_settingsWidget;
@@ -175,8 +193,8 @@ private:
     QComboBox *m_previewSelect;
     QLCDNumber *m_nMailsDisplay;
 
-    /* Bottom text */
-    QLabel *m_extraText;
+    /* Toolbar */
+    QToolBar *m_toolBar;
 
 };
 

@@ -9,11 +9,13 @@
 #include <QVBoxLayout>
 #include <QGridLayout>
 
-#include <QDialog>
+#include <QProgressDialog>
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
 
+#include <QToolBar>
+#include <QAction>
 #include <QToolButton>
 
 #include <QRegExp>
@@ -26,26 +28,32 @@
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent)
 {
+
     this->setWindowTitle(tr("Qt XLSX Email Generator [Hogeschool Rotterdam]"));
 
+    /* Make sure the SMTP connection pointer is NULL. */
     m_SMTPConnection = NULL;
 
+    /* Dockwidgets options. */
     setDockNestingEnabled(true);
-    setDockOptions(QMainWindow::AnimatedDocks);
+    setAnimated(true);
 
+    /* Create Dockwidgets and toolbar. */
     createGeneralOptionsWidget();
     createEditorWidget();
     createPreviewWidget();
     createXlsxViewerWidget();
+    createToolBar();
 
+    /* Add Dockwidgets and toolbar. */
     this->addDockWidget(Qt::TopDockWidgetArea, m_generalOptionsDW);
     this->addDockWidget(Qt::LeftDockWidgetArea, m_editorDW);
     this->addDockWidget(Qt::RightDockWidgetArea, m_previewDW);
     this->addDockWidget(Qt::BottomDockWidgetArea, m_xlsxViewerDW);
-
-    loadSettings();
+    this->addToolBar(Qt::BottomToolBarArea, m_toolBar);
 
     /* Set default values. */
+    loadSettings();
     updateSheet();
 
 }
@@ -61,13 +69,15 @@ MainWindow::~MainWindow(){
 
 void MainWindow::createRowSelectWidget(){
 
+    /* Create Frame. */
     m_rowSelectWidget = new QFrame(this);
-    m_rowSelectWidget->setMinimumWidth(150);
-    m_rowSelectWidget->setMaximumWidth(150);
+    m_rowSelectWidget->setFixedWidth(150);
     m_rowSelectWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
 
+    /* Create layout. */
     QVBoxLayout *rowSelectLayout = new QVBoxLayout(m_rowSelectWidget);
 
+    /* Create row selection. */
     m_firstRowSelect = new QComboBox(m_rowSelectWidget);
     m_firstRowSelect->setToolTip(tr("Select the row where the first email\nshould be generated from."));
     m_lastRowSelect = new QComboBox(m_rowSelectWidget);
@@ -75,9 +85,12 @@ void MainWindow::createRowSelectWidget(){
     connect(m_firstRowSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateInfo()));
     connect(m_lastRowSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateInfo()));
 
+    /* Select the column where the email addresses are in. */
     m_emailColumnSelect = new QComboBox(m_rowSelectWidget);
     m_emailColumnSelect->setToolTip(tr("Select the column for the\nemail address to use."));
     connect(m_emailColumnSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateText()));
+
+    /* Option to append a value to the addresses in the spreadsheet. */
     m_emailAppendText = new QLineEdit(tr("@hr.nl"), m_rowSelectWidget);
     m_emailAppendText->setToolTip(tr("Add a value that should be appended to\n"
                                      "the column where the email address is in.\n"
@@ -85,9 +98,16 @@ void MainWindow::createRowSelectWidget(){
                                      "email address, this field should be empty."));
     connect(m_emailAppendText, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
 
+    /* The button to send the mails. */
     QPushButton *sendMailsButton = new QPushButton(tr("Send mails"), m_rowSelectWidget);
+    sendMailsButton->setToolTip(tr("Pressing this button will check if everything is OK.\n\n"
+                                   "If not OK, it will display an error message.\n\n"
+                                   "If OK, it will connect to the SMTP server if there \n"
+                                   "is no connection yet and tries to send the e-mails.\n\n"
+                                   "Finally, a message will be displayed with the result."));
     connect(sendMailsButton, SIGNAL(clicked()), this, SLOT(sendMails()));
 
+    /* Add to layout. */
     rowSelectLayout->addWidget(new QLabel(tr("First mail [row]:"), m_rowSelectWidget));
     rowSelectLayout->addWidget(m_firstRowSelect);
     rowSelectLayout->addWidget(new QLabel(tr("Last mail [row]:"), m_rowSelectWidget));
@@ -100,16 +120,20 @@ void MainWindow::createRowSelectWidget(){
     rowSelectLayout->addSpacerItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding));
     rowSelectLayout->addWidget(sendMailsButton);
 
+    /* Set layout. */
     m_rowSelectWidget->setLayout(rowSelectLayout);
+
 }
 
 void MainWindow::createGeneralOptionsWidget(){
 
     m_generalOptionsDW = new QDockWidget(tr("General parameters"), this);
+    m_generalOptionsDW->setFixedHeight(130);
 
     QFrame *generalOptionsWidget = new QFrame(m_generalOptionsDW);
-    generalOptionsWidget->setMinimumHeight(130);
-    generalOptionsWidget->setMaximumHeight(130);
+    generalOptionsWidget->setFrameShape(QFrame::StyledPanel);
+    //generalOptionsWidget->setMinimumHeight(130);
+    //generalOptionsWidget->setMaximumHeight(130);
 
     QGridLayout *generalOptionsLayout = new QGridLayout(generalOptionsWidget);
     generalOptionsLayout->setContentsMargins(0, 5, 0, 5);
@@ -154,6 +178,24 @@ void MainWindow::createGeneralOptionsWidget(){
     m_emailBcc->setValidator(new QRegExpValidator(QRegExp("(([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63})[;])*", Qt::CaseInsensitive), m_emailBcc));
     connect(m_emailBcc, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
 
+    m_attachments = new QComboBox(generalOptionsWidget);
+    m_attachments->setToolTip(tr("These attachments will be added to all emails."));
+
+    m_addAttachment = new QPushButton(tr("+"), generalOptionsWidget);
+    m_addAttachment->setToolTip(tr("Add attachment."));
+    m_addAttachment->setMaximumWidth(30);
+    connect(m_addAttachment, SIGNAL(clicked()), this, SLOT(addAttachment()));
+
+    m_deleteSelectedAttachment = new QPushButton(tr("-"), generalOptionsWidget);
+    m_deleteSelectedAttachment->setToolTip(tr("Delete selected attachment."));
+    m_deleteSelectedAttachment->setMaximumWidth(30);
+    connect(m_deleteSelectedAttachment, SIGNAL(clicked()), this, SLOT(deleteAttachment()));
+
+    QHBoxLayout *attachmentLayout = new QHBoxLayout();
+    attachmentLayout->addWidget(m_attachments);
+    attachmentLayout->addWidget(m_deleteSelectedAttachment);
+    attachmentLayout->addWidget(m_addAttachment);
+
     /* Create the SMTP settings widget. */
     createSMTPWidget();
 
@@ -172,6 +214,8 @@ void MainWindow::createGeneralOptionsWidget(){
     generalOptionsLayout->addWidget(m_emailSubject, 0, 5);
     generalOptionsLayout->addWidget(new QLabel(tr("Course Code:"), generalOptionsWidget), 1, 4);
     generalOptionsLayout->addWidget(m_courseCode, 1, 5);
+    generalOptionsLayout->addWidget(new QLabel(tr("Attachments"), generalOptionsWidget), 2, 4);
+    generalOptionsLayout->addLayout(attachmentLayout, 2, 5);
     generalOptionsLayout->addWidget(m_SMTPWidgetToggleButton, 0, 6, 3, 1);
     generalOptionsLayout->addWidget(m_SMTPWidget, 0, 7, 3, 1);
 
@@ -319,7 +363,7 @@ void MainWindow::createEditorWidget(){
 
     /* Create Dockwidget for the editor. */
     m_editorDW = new QDockWidget(tr("Edit:"), this);
-    m_editorDW->setMinimumHeight(350);
+    m_editorDW->setMinimumHeight(375);
 
     /* Create main widget. */
     QFrame *editorWidget = new QFrame(m_editorDW);
@@ -398,7 +442,7 @@ void MainWindow::createGenerateWidget(){
 
     /* Button to create text in current tab. */
     QPushButton *replaceButton = new QPushButton(tr("Current Tab"), m_generateWidget);
-    replaceButton->setToolTip(tr("Generate text and overwrite currently selected tab."));
+    replaceButton->setToolTip(tr("Generate text and overwrite selected tab."));
     connect(replaceButton, SIGNAL(clicked()), this, SLOT(generateReplaceText()));
 
     /* Button to create text in new tab. */
@@ -473,10 +517,10 @@ void MainWindow::createPreviewWidget(){
 
     /* Create the dockwidget. */
     m_previewDW = new QDockWidget(tr("Selection and preview:"), this);
-    m_previewDW->setMinimumHeight(350);
+    m_previewDW->setMinimumHeight(375);
 
     /* Create a (main)frame for this widget. */
-    QFrame *previewWidget = new QFrame(this);
+    QFrame *previewWidget = new QFrame(m_previewDW);
     previewWidget->setFrameShape(QFrame::StyledPanel);
 
     /* Create main layout. */
@@ -488,19 +532,19 @@ void MainWindow::createPreviewWidget(){
     QHBoxLayout *previewSelectionLayout = new QHBoxLayout();
 
     /* Create 7-segment display for the number of mails. */
-    m_nMailsDisplay = new QLCDNumber(4, this);
+    m_nMailsDisplay = new QLCDNumber(4, m_previewDW);
     m_nMailsDisplay->setFrameStyle(QFrame::NoFrame);
     m_nMailsDisplay->setSegmentStyle(QLCDNumber::Filled);
     m_nMailsDisplay->setPalette(QPalette(Qt::red));
     m_nMailsDisplay->setToolTip(tr("This is the number of emails\nthat this program will send."));
 
     /* Selection for the row (email) to preview. */
-    m_previewSelect = new QComboBox(this);
+    m_previewSelect = new QComboBox(m_previewDW);
     m_previewSelect->setToolTip(tr("Select the row (email) you want to preview."));
     connect(m_previewSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateInfo()));
 
     /* The preview tool itself is a read-only textbox. */
-    m_previewText = new QTextEdit(this);
+    m_previewText = new QTextEdit(m_previewDW);
     m_previewText->setToolTip(tr("This is how the email looks as it will be send.\n"
                           "You can select an other email in the selection box above."));
     m_previewText->setReadOnly(true);
@@ -512,7 +556,7 @@ void MainWindow::createPreviewWidget(){
     createRowSelectWidget();
 
     /* Set it all in the layouts. */
-    previewSelectionLayout->addWidget(new QLabel(tr("Preview:"), this));
+    previewSelectionLayout->addWidget(new QLabel(tr("Preview:"), m_previewDW));
     previewSelectionLayout->addWidget(m_previewSelect);
     previewSelectionLayout->addWidget(m_nMailsDisplay);
     previewBoxLayout->addLayout(previewSelectionLayout);
@@ -534,24 +578,29 @@ void MainWindow::createXlsxViewerWidget(){
 
     /* Create the dockwidget that uses all of the available (remaining) space. */
     m_xlsxViewerDW = new QDockWidget(tr("XLSX Viewer:"), this);
+    m_xlsxViewerDW->setMinimumHeight(200);
     m_xlsxViewerDW->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
 
     /* Create a frame for this widget that uses all of the available (remaining) space. */
-    QFrame *xlsxWidget = new QFrame(this);
-    xlsxWidget->setMinimumHeight(200);
-    xlsxWidget->setMinimumWidth(400);
-    xlsxWidget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
+    QFrame *xlsxWidget = new QFrame(m_xlsxViewerDW);
+    xlsxWidget->setFrameShape(QFrame::StyledPanel);
 
     QVBoxLayout *l = new QVBoxLayout();
     QHBoxLayout *l1 = new QHBoxLayout();
 
-    m_loadXlsxFileButton = new QPushButton(tr("Load xlsx file"), this);
+    m_loadXlsxFileButton = new QPushButton(tr("Load xlsx file"), m_xlsxViewerDW);
+    m_loadXlsxFileButton->setToolTip(tr("Select an xlsx file from your computer.\n"
+                                        "All sheets will be loaded in this viewer,\n"
+                                        "in addition to those already loaded.\n"
+                                        "The last sheet loaded will be active."));
     connect(m_loadXlsxFileButton, SIGNAL(clicked()), this, SLOT(loadSheet()));
 
     /* Add the tabwidget where the tabs from the xlsx file can be loaded. */
-    m_xlsxTab = new QTabWidget(this);
+    m_xlsxTab = new QTabWidget(m_xlsxViewerDW);
     m_xlsxTab->setTabPosition(QTabWidget::South);
     m_xlsxTab->setTabsClosable(true);
+    m_xlsxTab->setToolTip(tr("The selected tab will be used to\n"
+                             "generate the e-mails from."));
     connect(m_xlsxTab, SIGNAL(tabCloseRequested(int)), this, SLOT(closeTab(int)));
     connect(m_xlsxTab, SIGNAL(currentChanged(int)), this, SLOT(updateSheet()));
 
@@ -569,33 +618,34 @@ void MainWindow::createXlsxViewerWidget(){
 
 }
 
-/* Todo: Place in toolbar */
-QWidget* MainWindow::createInfoBar(){
+/* Create Toolbar */
+void MainWindow::createToolBar(){
 
-    QWidget *infoWidget = new QWidget(this);
+    m_toolBar = new QToolBar(this);
+    m_toolBar->setMovable(false);
 
-    QHBoxLayout *l = new QHBoxLayout();
+    QLabel *infoLabel = new QLabel(m_toolBar);
+    infoLabel->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
+    infoLabel->setText(tr(APPLICATION_NAME) + tr(" - ")+ tr(APPLICATION_COMPANY) + tr(" - ") + tr(APPLICATION_YEAR));
 
-    m_extraText = new QLabel(this);
-    m_extraText->setText(tr(APPLICATION_AUTHOR) + tr(" - ")+ tr(APPLICATION_COMPANY) + tr(" - ") + tr(APPLICATION_YEAR));
+    QAction *help = new QAction(tr("Help"), m_toolBar);
+    connect(help, SIGNAL(triggered()), this, SLOT(test()));
 
-    QPushButton *help = new QPushButton(tr("Help"), this);
-    help->setEnabled(false);
+    QAction *about = new QAction(tr("About"), m_toolBar);
+    connect(about, SIGNAL(triggered()), this, SLOT(about()));
 
-    QPushButton *about = new QPushButton(tr("About"), this);
-    connect(about, SIGNAL(clicked()), this, SLOT(about()));
+    QAction *qtInfo = new QAction(tr("Qt"), m_toolBar);
+    connect(qtInfo, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
 
-    QPushButton *qtInfo = new QPushButton(tr("Qt"), this);
-    connect(qtInfo, SIGNAL(clicked()), qApp, SLOT(aboutQt()));
+    m_toolBar->addWidget(infoLabel);
+    m_toolBar->addSeparator();
+    m_toolBar->addAction(help);
+    m_toolBar->addSeparator();
+    m_toolBar->addAction(about);
+    m_toolBar->addSeparator();
+    m_toolBar->addAction(qtInfo);
+    m_toolBar->addSeparator();
 
-    l->addWidget(m_extraText);
-    l->addWidget(help);
-    l->addWidget(about);
-    l->addWidget(qtInfo);
-
-    infoWidget->setLayout(l);
-
-    return infoWidget;
 }
 
 /* Load an xlsx sheet */
@@ -608,7 +658,7 @@ void MainWindow::loadSheet(){
     }
 
     /* Open the document. */
-    QXlsx::Document *xlsx = new QXlsx::Document(filePath);
+    QXlsx::Document *xlsx = new QXlsx::Document(filePath, m_xlsxTab);
 
     /* Add add sheets (tabs) to the viewer. */
     foreach(QString sheetName, xlsx->sheetNames()){
@@ -619,6 +669,8 @@ void MainWindow::loadSheet(){
 
             /* Create a tableview for this sheet. */
             QTableView *view = new QTableView(m_xlsxTab);
+            view->setToolTip(tr("This is the data (read-only) from the selected sheet\n"
+                                "that will be used to generate the e-mail from."));
 
             /* Set to read-only. */
             view->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -833,18 +885,8 @@ void MainWindow::updateText(){
         m_emailBcc->setStyleSheet(tr(""));
     }
 
-    /* Extract default fields. */
-    res += tr("From: ") + m_senderName->text() + tr(" <") + m_senderEmail->text() +  tr(">\n");
-    res += tr("To: <") + getData(m_emailColumnSelect->currentText(), offset) + m_emailAppendText->text() + tr(">\n");
-    foreach(QString bcc, bcc_addresses){
-        if(!bcc.isEmpty()){
-            res += tr("Bcc: <") + bcc + tr(">\n");
-        }
-    }
-    res += tr("Subject: [") + m_courseCode->text() + tr("] ") + m_emailSubject->text() + tr("\n");
-    res += tr("\n\n");
-
     /* Get the main contents. */
+    res += getMailHeader(offset);
     res += getMailText(offset);
 
     /* set text to preview. */
@@ -982,7 +1024,7 @@ void MainWindow::sendMails(){
         return;
     }
 
-    /* Check is there are any mails to send. */
+    /* Check if there are any mails to send. */
     if(m_nMailsDisplay->value() == 0){
         QMessageBox::warning(this, tr("Error:"), tr("The number of mails is 0!"));
         return;
@@ -1015,7 +1057,7 @@ void MainWindow::sendMails(){
     /* Get bcc addresses. */
     QStringList bcc_addresses = m_emailBcc->text().split(";");
 
-    /* Check if they are OK. */
+    /* Check if the bcc's are OK. */
     foreach(QString bcc, bcc_addresses){
         if(bcc.isEmpty()){
             bcc_addresses.removeAll(bcc);
@@ -1025,6 +1067,22 @@ void MainWindow::sendMails(){
         if(!isValidEmail(bcc)){
             QMessageBox::warning(this, tr("Error:"), tr("The bcc email address ") + bcc + tr(" is invalid!"));
             m_emailBcc->setFocus();
+            return;
+        }
+    }
+
+    /* Read Attachments. */
+    QList<QFile*> attachmentFiles;
+    QList<MimeAttachment*> attachments;
+    for(int i = 0; i < m_attachments->count(); i++){
+        QString fileName = m_attachments->itemData(i).toString();
+        QFile *f = new QFile(fileName);
+        if(f->exists()){
+            MimeAttachment *att = new MimeAttachment(f);
+            attachments.append(att);
+        }
+        else{
+            QMessageBox::warning(this, tr("Error:"), tr("Attachment ") + fileName + tr(" can not be loaded!"));
             return;
         }
     }
@@ -1041,7 +1099,9 @@ void MainWindow::sendMails(){
     if(QMessageBox::question(this, tr("Send Emails now?"),
                                    tr("Are you sure you want to send ") +
                                    QString::number(m_nMailsDisplay->value()) +
-                                   tr(" emails now ?")
+                                   tr(" emails with the ") +
+                                   tr("subject \" [") + m_courseCode->text() + tr("] ") + m_emailSubject->text() + tr("\"") +
+                                   tr(" and ") + QString::number(m_attachments->count()) + tr(" attachments now?")
                              ) != QMessageBox::Yes){
         return;
     }
@@ -1050,6 +1110,7 @@ void MainWindow::sendMails(){
     int nSuccess = 0;
     QString failed;
     int nFailed = 0;
+    QString allTexts;
 
     /* Sender is the same for each mail. */
     EmailAddress sender(fromEmail, fromName);
@@ -1078,35 +1139,119 @@ void MainWindow::sendMails(){
         message.setSubject(subject);
 
         /* Add contents. */
-        text.setText(getMailText(i));
+        QString mailText = getMailText(i);
+        text.setText(mailText);
+        allTexts.append(tr("\n\n============================== " ) + QString::number(i) + tr(" ==============================\n"));
+        allTexts.append(getMailHeader(i));
+        allTexts.append(mailText);
 
         /* Add content to message. */
         message.addPart(&text);
 
-        /* Try to send the mail. If failed, keep track of this. */
-        try {
-            if(m_SMTPConnection == NULL || !m_SMTPConnection->sendMail(message)){
-                failed += tr("  ") + recv_mail + tr("\n");
-                nFailed++;
-                continue;
-            }
-
-            success += tr("  ") + recv_mail + tr("\n");
-            nSuccess++;
+        /* Add attachments. */
+        foreach(MimeAttachment *att, attachments){
+            message.addPart(att);
         }
-        catch (...){
+
+        /* Try to send the mail. If failed, keep track of this. */
+        if(!sendMail(&message)){
             failed += tr("  ") + recv_mail + tr("\n");
             nFailed++;
+            continue;
         }
+
+        success += tr("  ") + recv_mail + tr("\n");
+        nSuccess++;
 
     }
 
+    QString res = tr("Number of mails: ") + QString::number(nMails) + tr(" mails.\n\n") +
+                  tr("Mails OK: ") + QString::number(nSuccess) + tr("\n\n") +
+                  tr("Mails Failed: ") + QString::number(nFailed) + tr("\n") + failed + tr("\n");
+
+    allTexts.prepend(tr("Report: ") + subject + tr("\n\n") + res + tr("\nData:"));
+    allTexts.append(tr("\n============================== END ==============================\n"));
+
+    /* Message and content. */
+    MimeMessage message;
+    MimeText text;
+
+    /* Set sender and receiver. */
+    message.setSender(&sender);
+    message.addRecipient(&sender);
+
+    /* Add bcc's */
+    //foreach(QString bcc, bcc_addresses){
+    //    message.addBcc(new EmailAddress(bcc));
+    //}
+
+    /* Add subject */
+    message.setSubject(tr("Report: ") + subject);
+
+    /* Add contents. */
+    text.setText(allTexts);
+
+    /* Add content to message. */
+    message.addPart(&text);
+
+    /* Add attachments. */
+    foreach(MimeAttachment *att, attachments){
+        message.addPart(att);
+    }
+
+    sendMail(&message);
+
     /* Give information. */
-    QMessageBox::information(this, tr("Info:"),
-                                   tr("Tried to send ") + QString::number(nMails) + tr(" mails.\n\n") +
-                                   tr("Mails OK: ") + QString::number(nSuccess) + tr("\n\n") +
-                                   tr("Mails Failed:") + QString::number(nFailed) + tr("\n") + failed + tr("\n")
-                             );
+    QMessageBox::information(this, tr("Info:"), res);
+
+    /* Cleanup attachments*/
+    foreach(QFile *f, attachmentFiles){
+        delete f;
+    }
+    foreach(MimeAttachment *att, attachments){
+        delete att;
+    }
+}
+
+bool MainWindow::sendMail(MimeMessage *m){
+
+    bool ret = false;
+
+    if(DO_NOT_SEND_EMAILS){
+        return false;
+    }
+
+    try {
+        ret = m_SMTPConnection->sendMail(*m);
+    }
+    catch (...){
+        ret = false;
+    }
+
+    return ret;
+}
+
+QString MainWindow::getMailHeader(int offset){
+
+    QString txt;
+    QStringList bcc_addresses = m_emailBcc->text().split(";");
+
+    /* Extract default fields. */
+    txt += tr("From: ") + m_senderName->text() + tr(" <") + m_senderEmail->text() +  tr(">\n");
+    txt += tr("To: <") + getData(m_emailColumnSelect->currentText(), offset) + m_emailAppendText->text() + tr(">\n");
+    foreach(QString bcc, bcc_addresses){
+        if(!bcc.isEmpty()){
+            txt += tr("Bcc: <") + bcc + tr(">\n");
+        }
+    }
+    txt += tr("Subject: [") + m_courseCode->text() + tr("] ") + m_emailSubject->text() + tr("\n");
+    for(int i = 0; i < m_attachments->count(); i++){
+        txt += tr("Attachment: ") + m_attachments->itemData(i).toString() + tr("\n");
+    }
+    txt += tr("\n\n");
+
+    return txt;
+
 }
 
 /* Parses the text from the editor to fill with values from the spreadsheet. */
@@ -1367,14 +1512,17 @@ bool MainWindow::isValidEmail(QString address){
     return QRegExp("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63}", Qt::CaseInsensitive).exactMatch(address);
 }
 
+/* Validate HR student email address. */
 bool MainWindow::isValidHRStudentEmail(QString address){
     return QRegExp("\\d{7}@hr.nl", Qt::CaseInsensitive).exactMatch(address);
 }
 
+/* Validate HR employee email address. */
 bool MainWindow::isValidHREmployeeEmail(QString address){
     return QRegExp("[a-z]{5}@hr.nl", Qt::CaseInsensitive).exactMatch(address);
 }
 
+/* Save settings. */
 void MainWindow::saveSettings(){
 
     QSettings *s = new QSettings(tr(APPLICATION_COMPANY_ABBR), tr(APPLICATION_NAME_ABBR), this);
@@ -1537,4 +1685,49 @@ void MainWindow::closeEvent(QCloseEvent *closeEvent){
     saveSettings();
     closeEvent->accept();
 
+}
+
+void MainWindow::addAttachment(){
+    /* Ask for the file. */
+    QString filePath = QFileDialog::getOpenFileName(this, "Select file");
+    if(filePath.isEmpty()){
+        return;
+    }
+
+    QFileInfo fInfo = QFileInfo(filePath);
+
+    m_attachments->addItem(fInfo.fileName(), filePath);
+    m_attachments->setItemData(m_attachments->count() - 1, tr("Size: ") + QString::number(fInfo.size()/1024) + tr("kB.\nFull path:\n") + filePath + tr("\n"), Qt::ToolTipRole);
+}
+
+void MainWindow::deleteAttachment(){
+
+    if(m_attachments->currentText().isEmpty()){
+        return;
+    }
+
+    /* Sure? */
+    if(QMessageBox::question(this, tr("Remove Attachment?"),
+                                   tr("Are you sure you want to remove the attachment \"") +
+                                   m_attachments->currentText() + tr("\"?\n") +
+                                   tr("\nFull path:\n") + m_attachments->currentData().toString() + tr("\n")
+                             ) != QMessageBox::Yes){
+        return;
+    }
+
+    m_attachments->removeItem(m_attachments->currentIndex());
+
+}
+
+void MainWindow::test(){
+/*
+
+    for(int i = 1; i <= 30000; i++){
+        pd.setValue(i);
+        //pd.update();
+        //qDebug() << i << endl;
+        qApp->processEvents();
+
+    }
+    */
 }
