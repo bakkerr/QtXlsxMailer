@@ -20,6 +20,8 @@
 #include <QRegExp>
 #include <QStringRef>
 
+#include <QProgressBar>
+
 #include <mimetext.h>
 #include <mimeattachment.h>
 
@@ -1768,15 +1770,25 @@ void MainWindow::sendMails(){
     int nFailed = 0;
     QString allTexts;
 
+    // Show progressbar
+    QProgressBar progressBar(this);
+    progressBar.setMinimum(0);
+    progressBar.setMaximum(nMails);
+    progressBar.setFixedWidth(this->width());
+    progressBar.show();
+
     /* Send messages. */
     for(int i = 0; i < nMails; i++){
         int index = start + i;
 
-        progress.setText(tr("Sending message ") + QString::number(i) + tr(" / ") + QString::number(nMails) + tr("..."));
+        progress.setText(tr("Sending message ") + QString::number(i+1) + tr(" / ") + QString::number(nMails) + tr("..."));
+        progressBar.setValue(i+1);
+
         qApp->processEvents();
 
         /* Add contents. */
-        allTexts.append(tr("\n\n============================== " ) + QString::number(index) + tr(" ==============================\n"));
+        // BroJZ: number of message shown instead of index
+        allTexts.append(tr("\n\n============================== " ) + QString::number(i+1) + tr(" ==============================\n"));
         allTexts.append(getMailHeader(index));
         allTexts.append(texts[i].getText());
 
@@ -1789,8 +1801,8 @@ void MainWindow::sendMails(){
 
         success += tr("  ") + messages[i].getRecipients()[0]->getAddress() + tr("\n");
         nSuccess++;
-
     }
+    progressBar.hide();
 
     /* Prepare report. */
     progress.setText(tr("Sending Report..."));
