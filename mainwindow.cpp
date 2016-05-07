@@ -21,8 +21,6 @@
 #include <QRegExp>
 #include <QStringRef>
 
-#include <QProgressBar>
-
 #include <mimetext.h>
 #include <mimeattachment.h>
 
