@@ -56,6 +56,7 @@ private slots:
     void toggleSettingsWidget(bool b);
     void toggleSMTPWidget(bool b);
     void toggleGenerateWidget(bool s);
+    void toggleAttachmentWidget(bool s);
 
     /*
      * [5] Update / load.
@@ -66,6 +67,8 @@ private slots:
 
     /* Delete Attachment. */
     void deleteAttachment();
+
+    void selectAttachmentDirectory();
 
     /* Load sheet dialog */
     void loadSheet();
@@ -125,6 +128,7 @@ private:
     /* Preview Dockwidget */
     void createPreviewWidget();
     void createMailSelectWidget();
+    void createAttachmentWidget();
 
     /* Xlsx Viewer Dockwidget. */
     void createXlsxViewerWidget();
@@ -216,6 +220,15 @@ private:
     QComboBox *m_lastRowSelect;
     QComboBox *m_previewSelect;
     QLCDNumber *m_nMailsDisplay;
+
+    /* Attacment Widget */
+    QFrame *m_attachmentWidget;
+    QPropertyAnimation *m_toggleAttachmentAnimation;
+    QPushButton *m_attachmentWidgetToggleButton;
+    QString m_attachmentDirectory;
+    QLineEdit *m_attachmentAppend;
+    QPushButton *m_selectAttachmentDirectoryButton;
+    QComboBox *m_attachmentColSelect;
 
     /* Toolbar */
     QToolBar *m_toolBar;
