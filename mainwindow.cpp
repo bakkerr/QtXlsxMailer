@@ -12,6 +12,7 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QProgressBar>
 
 #include <QToolBar>
 #include <QToolButton>
@@ -19,8 +20,6 @@
 
 #include <QRegExp>
 #include <QStringRef>
-
-#include <QProgressBar>
 
 #include <mimetext.h>
 #include <mimeattachment.h>
@@ -128,8 +127,8 @@ void MainWindow::createGeneralOptionsWidget(){
     /* Email bcc field. */
     m_emailBcc = new QLineEdit(tr(""), generalOptionsWidget);
     m_emailBcc->setToolTip(tr("Send a (blind) copy of every email to this address.\n"
-                              "Multiple addresses may be added seperated by a ';' and\n"
-                              "no spaces.\n\n"
+                              "Multiple addresses may be added seperated by a ';'\n"
+                              "and no spaces.\n\n"
                               "Example \"collegue@hr.nl;other@extern.com\""));
     m_emailBcc->setValidator(new QRegExpValidator(QRegExp("(([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63})[;])*", Qt::CaseInsensitive), m_emailBcc));
     connect(m_emailBcc, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
@@ -137,15 +136,16 @@ void MainWindow::createGeneralOptionsWidget(){
     /* Report cc field. */
     m_reportCC = new QLineEdit(tr(""), generalOptionsWidget);
     m_reportCC->setToolTip(tr("Send a copy of the report to this address.\n"
-                              "Multiple addresses may be added seperated by a ';' and\n"
-                              "no spaces.\n\n"
+                              "Multiple addresses may be added seperated by a ';'\n"
+                              "and no spaces.\n\n"
                               "Example \"collegue@hr.nl;other@extern.com\""));
     m_reportCC->setValidator(new QRegExpValidator(QRegExp("(([A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z0-9-]{2,63})[;])*", Qt::CaseInsensitive), m_reportCC));
     connect(m_reportCC, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
 
     m_attachments = new QComboBox(generalOptionsWidget);
     m_attachments->setToolTip(tr("These attachments will be added to all emails."));
-    connect(m_attachments, SIGNAL(activated(int)), this, SLOT(updateText()));
+    m_attachments->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
+    m_attachments->hide();
 
     m_addAttachment = new QPushButton(tr("+"), generalOptionsWidget);
     m_addAttachment->setToolTip(tr("Add attachment."));
@@ -156,11 +156,12 @@ void MainWindow::createGeneralOptionsWidget(){
     m_deleteSelectedAttachment->setToolTip(tr("Delete selected attachment."));
     m_deleteSelectedAttachment->setMaximumWidth(30);
     connect(m_deleteSelectedAttachment, SIGNAL(clicked()), this, SLOT(deleteAttachment()));
+    m_deleteSelectedAttachment->hide();
 
     QHBoxLayout *attachmentLayout = new QHBoxLayout();
-    attachmentLayout->addWidget(m_attachments);
-    attachmentLayout->addWidget(m_deleteSelectedAttachment);
     attachmentLayout->addWidget(m_addAttachment);
+    attachmentLayout->addWidget(m_deleteSelectedAttachment);
+    attachmentLayout->addWidget(m_attachments);
 
     /* Create the SMTP settings widget. */
     createSMTPWidget();
@@ -184,6 +185,7 @@ void MainWindow::createGeneralOptionsWidget(){
     generalOptionsLayout->addWidget(m_courseCode, 1, 5);
     generalOptionsLayout->addWidget(new QLabel(tr("Attachments:"), generalOptionsWidget), 2, 4);
     generalOptionsLayout->addLayout(attachmentLayout, 2, 5);
+    generalOptionsLayout->setAlignment(attachmentLayout, Qt::AlignLeft);
     generalOptionsLayout->addWidget(m_SMTPWidgetToggleButton, 0, 6, 4, 1);
     generalOptionsLayout->addWidget(m_SMTPWidget, 0, 7, 4, 1);
 
@@ -350,6 +352,7 @@ void MainWindow::createEditorWidget(){
 
 /* Create widget to generate email text. */
 void MainWindow::createGenerateWidget(){
+
     /* Create a frame for this widget. */
     m_generateWidget = new QFrame(m_editorDW);
     m_generateWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
@@ -424,11 +427,14 @@ void MainWindow::createGenerateWidget(){
     generateWidgetLayout->addWidget(m_stopColSelect, 4, 1);
     generateWidgetLayout->addWidget(m_headerRowSelect, 5, 1);
     generateWidgetLayout->addWidget(m_maxRowSelect, 6, 1);
+    generateWidgetLayout->setRowStretch(7, 40);
     generateWidgetLayout->addWidget(newButton, 9, 0);
     generateWidgetLayout->addWidget(replaceButton, 9, 1);
 
     /* Set layout to main widget. */
+    generateWidgetLayout->setAlignment(Qt::AlignTop);
     m_generateWidget->setLayout(generateWidgetLayout);
+
 }
 
 /* Create the selection and preview widget. */
@@ -536,22 +542,71 @@ void MainWindow::createMailSelectWidget(){
                                    "Finally, a message will be displayed with the result."));
     connect(sendMailsButton, SIGNAL(clicked()), this, SLOT(sendMails()));
 
+    /* Create Attachment Widget. */
+    createAttachmentWidget();
+
     /* Add to layout. */
     rowSelectLayout->addWidget(new QLabel(tr("First mail [row]:"), m_rowSelectWidget));
     rowSelectLayout->addWidget(m_firstRowSelect);
     rowSelectLayout->addWidget(new QLabel(tr("Last mail [row]:"), m_rowSelectWidget));
     rowSelectLayout->addWidget(m_lastRowSelect);
-    rowSelectLayout->addSpacing(5);
-    rowSelectLayout->addWidget(new QLabel(tr("Use the email\naddress in [col]:"), m_rowSelectWidget));
+    rowSelectLayout->addWidget(new QLabel(tr("Email address [col]:"), m_rowSelectWidget));
     rowSelectLayout->addWidget(m_emailColumnSelect);
     rowSelectLayout->addWidget(new QLabel(tr("and append:"), m_rowSelectWidget));
     rowSelectLayout->addWidget(m_emailAppendText);
     rowSelectLayout->addSpacerItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding));
+    rowSelectLayout->addWidget(m_attachmentWidgetToggleButton);
+    rowSelectLayout->addWidget(m_attachmentWidget);
     rowSelectLayout->addWidget(sendMailsButton);
 
     /* Set layout. */
     m_rowSelectWidget->setLayout(rowSelectLayout);
 
+}
+
+void MainWindow::createAttachmentWidget(){
+
+    /* Create a frame for this widget. */
+    m_attachmentWidget = new QFrame(m_previewDW);
+    m_attachmentWidget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
+
+    QVBoxLayout *attachmentWidgetLayout = new QVBoxLayout(m_attachmentWidget);
+    attachmentWidgetLayout->setContentsMargins(0, 0, 0, 0);
+
+    /* Define animation for adjusting the maximumHeight of the widget. */
+    m_toggleAttachmentAnimation = new QPropertyAnimation(m_attachmentWidget, "maximumHeight");
+    m_toggleAttachmentAnimation->setDuration(500);
+
+    /* Button to show/hide this widget. */
+    m_attachmentWidgetToggleButton = new QPushButton(tr("^"), m_previewDW);
+    m_attachmentWidgetToggleButton->setMinimumHeight(20);
+    m_attachmentWidgetToggleButton->setMaximumHeight(20);
+    m_attachmentWidgetToggleButton->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Maximum);
+    m_attachmentWidgetToggleButton->setCheckable(true);
+    connect(m_attachmentWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleAttachmentWidget(bool)));
+    connect(m_toggleAttachmentAnimation, SIGNAL(finished()), this, SLOT(repaint()));
+    m_attachmentWidgetToggleButton->setChecked(true);
+    m_attachmentWidgetToggleButton->setChecked(false);
+
+    m_selectAttachmentDirectoryButton = new QPushButton(tr("Select Directory"), m_attachmentWidget);
+    m_selectAttachmentDirectoryButton->setToolTip(tr("Select the directory where the\n"
+                                                     "individual attachments are located."));
+    connect(m_selectAttachmentDirectoryButton, SIGNAL(clicked()), this, SLOT(selectAttachmentDirectory()));
+
+    m_attachmentColSelect = new QComboBox(m_attachmentWidget);
+    m_attachmentColSelect->setToolTip(tr("Select the column to load the\n"
+                                         "individual attachment from."));
+    connect(m_attachmentColSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateInfo()));
+
+    m_attachmentAppend = new QLineEdit(tr(".pdf"), m_attachmentWidget);
+    m_attachmentAppend->setToolTip(tr("Text or extension to add to the filename."));
+    connect(m_attachmentAppend, SIGNAL(textChanged(QString)), this, SLOT(updateInfo()));
+
+    attachmentWidgetLayout->addWidget(m_selectAttachmentDirectoryButton);
+    attachmentWidgetLayout->addWidget(m_attachmentColSelect);
+    attachmentWidgetLayout->addWidget(m_attachmentAppend);
+
+    m_attachmentWidget->setLayout(attachmentWidgetLayout);
 }
 
 /* Create the preview tool for xlsx sheets. */
@@ -644,19 +699,53 @@ QString MainWindow::getMailHeader(int offset){
     QString txt;
     QStringList bcc_addresses = m_emailBcc->text().split(";");
 
-    /* Extract default fields. */
+    /* From/To. */
     txt += tr("From: ") + m_senderName->text() + tr(" <") + m_senderEmail->text() +  tr(">\n");
     txt += tr("To: <") + getData(m_emailColumnSelect->currentText(), offset) + m_emailAppendText->text() + tr(">\n");
+
+    /* BCC. */
     foreach(QString bcc, bcc_addresses){
         if(!bcc.isEmpty()){
             txt += tr("Bcc: <") + bcc + tr(">\n");
         }
     }
+
+    /* Subject. */
     txt += tr("Subject: [") + m_courseCode->text() + tr("] ") + m_emailSubject->text() + tr("\n");
+
+    /* Global attachments. */
     for(int i = 0; i < m_attachments->count(); i++){
-        txt += tr("Attachment: ") + m_attachments->itemText(i) + tr("\n");
+        QString info = tr("");
+        QString filePath = m_attachments->itemData(i).toString();
+        QFileInfo fInfo = QFileInfo(filePath);
+
+        if(!fInfo.exists()){
+            info += tr(" [!INVALID FILE]");
+        }
+        else{
+            info += tr(" [") + QString::number(fInfo.size()/1024) + tr(" kB]");
+        }
+
+        txt += tr("Global Attachment: ") + m_attachments->itemText(i) + info + tr("\n");
     }
-    txt += tr("\n\n");
+
+    /* Individual attachment. */
+    if(m_attachmentColSelect->currentText() != tr("<none>")){
+        QString info = tr("");
+        QString fileName = getData(m_attachmentColSelect->currentText(), offset) + m_attachmentAppend->text();
+        QString filePath = m_attachmentDirectory + QDir::separator() + fileName;
+        QFileInfo fInfo = QFileInfo(filePath);
+
+        if(!fInfo.exists()){
+            info += tr(" [!INVALID FILE]");
+        }
+        else{
+            info += tr(" [") + QString::number(fInfo.size()/1024) + tr(" kB]");
+        }
+
+        txt += tr("Individual Attachment: ") + fileName + info + tr("\n");
+    }
+    txt += tr("\n");
 
     return txt;
 
@@ -1028,6 +1117,29 @@ void MainWindow::toggleGenerateWidget(bool s){
 
 }
 
+/* Show/hide the generateWidget. */
+void MainWindow::toggleAttachmentWidget(bool s){
+
+    if(!s){
+        /* Hide. */
+        m_toggleAttachmentAnimation->setStartValue(100);
+        m_toggleAttachmentAnimation->setEndValue(0);
+        m_attachmentWidgetToggleButton->setText(tr("^"));
+        m_attachmentWidgetToggleButton->setToolTip(tr("Show individual attachment options."));
+    }
+    else{
+        /* Show. */
+        m_toggleAttachmentAnimation->setStartValue(0);
+        m_toggleAttachmentAnimation->setEndValue(100);
+        m_attachmentWidgetToggleButton->setText(tr("v"));
+        m_attachmentWidgetToggleButton->setToolTip(tr("Hide individual attachment options."));
+    }
+
+    /* Start animation. */
+    m_toggleAttachmentAnimation->start();
+
+}
+
 /*
  *  [5] Update.
  */
@@ -1046,7 +1158,14 @@ void MainWindow::addAttachment(){
 
     /* Add filename to the list of attachments. */
     m_attachments->addItem(fInfo.fileName(), filePath);
-    m_attachments->setItemData(m_attachments->count() - 1, tr("Size: ") + QString::number(fInfo.size()/1024) + tr("kB.\nFull path:\n") + filePath + tr("\n"), Qt::ToolTipRole);
+    m_attachments->setItemData(m_attachments->count() - 1, tr("Size: ") + QString::number(fInfo.size()/1024) + tr("kB.\n\nFull path:\n") + filePath + tr("\n"), Qt::ToolTipRole);
+
+    /* Load values into preview text. */
+    updateText();
+
+    /* Show attachment fields. */
+    m_attachments->show();
+    m_deleteSelectedAttachment->show();
 
 }
 
@@ -1069,6 +1188,25 @@ void MainWindow::deleteAttachment(){
 
     /* Ok, then delete it. */
     m_attachments->removeItem(m_attachments->currentIndex());
+
+    updateText();
+
+    /* Hide fields when there are no attachments. */
+    if(m_attachments->count() < 1){
+        m_attachments->hide();
+        m_deleteSelectedAttachment->hide();
+    }
+
+}
+
+void MainWindow::selectAttachmentDirectory(){
+
+    m_attachmentDirectory = QFileDialog::getExistingDirectory(this, tr("Select Directory to load attachments from:"));
+    m_selectAttachmentDirectoryButton->setToolTip(tr("Select the directory where the\n"
+                                                     "individual attachments are located.\n\n"
+                                                     "Current directory:\n") + m_attachmentDirectory);
+
+    updateText();
 
 }
 
@@ -1141,8 +1279,8 @@ void MainWindow::updateSheet(){
     columnNames.prepend(tr("<none>"));
     rowNames.prepend(tr("<none>"));
 
-    QComboBox *cols[] = {m_nameColSelect, m_finalGradeColSelect, m_startColSelect, m_stopColSelect};
-    for(int i = 0; i < 4; i++){
+    QComboBox *cols[] = {m_nameColSelect, m_finalGradeColSelect, m_startColSelect, m_stopColSelect, m_attachmentColSelect};
+    for(int i = 0; i < 5; i++){
         QComboBox *c = cols[i];
         QString tmp = c->currentText();
         c->clear();
@@ -1199,7 +1337,7 @@ void MainWindow::updateInfo(){
     /* Insert new items to selection boxes. */
     for(int i = 1; i <= max; i++){
         m_firstRowSelect->addItem(QString::number(i));
-        if(i >= start && i <= stop){
+        if(i >= start && i <= stop && !getData(m_emailColumnSelect->currentText(), i).isEmpty()){
             m_previewSelect->addItem(QString::number(i));
         }
         if(i >= start){
@@ -1222,7 +1360,7 @@ void MainWindow::updateInfo(){
 
     /* Calculate and set number of generated mails. */
     if(max > 0){
-        m_nMailsDisplay->display(m_lastRowSelect->currentText().toInt() - m_firstRowSelect->currentText().toInt() + 1);
+        m_nMailsDisplay->display(m_previewSelect->count());
     }
     else{
         m_nMailsDisplay->display(0);
@@ -1237,6 +1375,7 @@ void MainWindow::updateInfo(){
 void MainWindow::updateText(){
 
     QStringList bcc_addresses = m_emailBcc->text().split(";");
+    QStringList report_addresses = m_reportCC->text().split(";");
 
     /* Generate preview text. */
     QString res;
@@ -1267,6 +1406,10 @@ void MainWindow::updateText(){
             !bcc.isEmpty() && !isValidEmail(bcc) ? m_emailBcc->setStyleSheet(tr("background-color: #FF9999;")) :
                                                    m_emailBcc->setStyleSheet(tr(""));
         }
+        foreach(QString reportcc, report_addresses){
+            !reportcc.isEmpty() && !isValidEmail(reportcc) ? m_reportCC->setStyleSheet(tr("background-color: #FF9999;")) :
+                                                             m_reportCC->setStyleSheet(tr(""));
+        }
     }
     else{
         m_senderEmail->setStyleSheet(tr(""));
@@ -1274,6 +1417,7 @@ void MainWindow::updateText(){
         m_courseCode->setStyleSheet(tr(""));
         m_loadXlsxFileButton->setStyleSheet(tr(""));
         m_emailBcc->setStyleSheet(tr(""));
+        m_reportCC->setStyleSheet(tr(""));
     }
 
     /* Get the main contents. */
@@ -1583,24 +1727,42 @@ void MainWindow::SMTPdisconnect(){
  */
 void MainWindow::sendMails(){
 
+    /* Calculate number of mails. */
+    int nMails = m_previewSelect->count();
+    int nAttachments = 0;
+
     /* Display Progress. */
-    QLabel progress(this);
-    progress.setText(tr("Checking parameters..."));
+    QWidget progress(this);
     progress.setFixedSize(this->width(), this->height());
-    progress.setAlignment(Qt::AlignCenter);
     progress.setAutoFillBackground(true);
-    progress.setFrameShape(QFrame::StyledPanel);
+
+    QVBoxLayout progressLayout(&progress);
+    progressLayout.setAlignment(Qt::AlignHCenter);
+
+    QLabel progressText(this);
+    progressText.setFixedSize(this->width(), this->height());
+    progressText.setAutoFillBackground(true);
+    progressText.setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+
+    QProgressBar progressBar(this);
+    progressBar.setRange(0, 0);
+    progressBar.setFixedWidth((this->width()*2)/3);
+
+    progressLayout.addSpacing(this->height()/8);
+    progressLayout.addWidget(&progressBar);
+    progressLayout.addWidget(&progressText);
+    progressLayout.setAlignment(&progressBar, Qt::AlignHCenter);
+    progress.setLayout(&progressLayout);
     progress.show();
-    qApp->processEvents();
 
-    /* Read start/stop rows and calculate number of mails. */
-    int start = m_firstRowSelect->currentText().toInt();
-    int stop = m_lastRowSelect->currentText().toInt();
-    int nMails = stop - start + 1;
-
+    /* Mail Objects */
     MimeMessage messages[nMails];
     MimeText texts[nMails];
     EmailAddress sender(tr(""));
+
+    /* Check parameters... */
+    progressText.setText(tr("Checking parameters..."));
+    qApp->processEvents();
 
     /* Check sender. */
     QString fromEmail = m_senderEmail->text();
@@ -1681,47 +1843,58 @@ void MainWindow::sendMails(){
         if(f->exists()){
             MimeAttachment *att = new MimeAttachment(f);
             attachments.append(att);
+            nAttachments++;
         }
         else{
             QMessageBox::warning(this, tr("Error:"), tr("Attachment ") + fileName + tr(" can not be loaded!"));
             return;
         }
     }
+    if(m_attachmentColSelect->currentText() != tr("<none>")){
+        nAttachments++;
+    }
 
-    progress.setText("Checking messages...");
+
+    /* Checking messages... */
+    progressText.setText("Checking messages...");
     qApp->processEvents();
 
     /* Check and generate mails. */
     for(int i = 0; i < nMails; i++){
-        int index = start + i;
+        int rowIndex = m_previewSelect->itemText(i).toInt();
 
+        /* Set sender. */
         messages[i].setSender(&sender);
 
         /* Recipient address OK? */
-        QString recv_mail = getData(m_emailColumnSelect->currentText(), index) + m_emailAppendText->text();
+        QString recv_mail = getData(m_emailColumnSelect->currentText(), rowIndex) + m_emailAppendText->text();
         if(!isValidEmail(recv_mail)){
             QMessageBox::warning(this, tr("Error:"), tr("The email address ") + recv_mail +
-                                 tr(" on line ") + QString::number(index) + tr(" is invalid!"));
+                                 tr(" on line ") + QString::number(rowIndex) + tr(" is invalid!"));
             m_emailColumnSelect->setFocus();
             return;
         }
         if(m_validateHR->isChecked()){
             if(!isValidHRStudentEmail(recv_mail)){
                 QMessageBox::warning(this, tr("Error:"), tr("The email address ") + recv_mail +
-                                     tr(" on line ") + QString::number(index) +
+                                     tr(" on line ") + QString::number(rowIndex) +
                                      tr(" is not a valid HR student email address!"));
                 return;
             }
-        }     
+        }
+
+        /* Add receiver. */
         messages[i].addTo(new EmailAddress(recv_mail));
 
         /* Mailtext OK? */
-        QString mailText = getMailText(index);
+        QString mailText = getMailText(rowIndex);
         if(mailText.contains("[INV_REF!]")){
             QMessageBox::warning(this, tr("Error:"), tr("There are invalid references in the mailtext of email ") +
-                                 QString::number(index) + tr("!"));
+                                 QString::number(rowIndex) + tr("!"));
             return;
         }
+
+        /* Add text to mail. */
         texts[i].setText(mailText);
         messages[i].addPart(&texts[i]);
 
@@ -1737,9 +1910,24 @@ void MainWindow::sendMails(){
         foreach(MimeAttachment *att, attachments){
             messages[i].addPart(att);
         }
+
+        /* Add individual attachment. */
+        if(m_attachmentColSelect->currentText() != tr("<none>")){
+            QString fileName = m_attachmentDirectory + QDir::separator() + getData(m_attachmentColSelect->currentText(), rowIndex) + m_attachmentAppend->text();
+            QFile *f = new QFile(fileName);
+            if(f->exists()){
+                MimeAttachment *att = new MimeAttachment(f);
+                messages[i].addPart(att);
+            }
+            else{
+                QMessageBox::warning(this, tr("Error:"), tr("Attachment ") + fileName + tr(" can not be loaded!"));
+                return;
+            }
+        }
     }
 
-    progress.setText("Connect to SMTP server...");
+    /* Connect to SMTP */
+    progressText.setText("Connect to SMTP server...");
     qApp->processEvents();
 
     /* Do we already have a connection? If not, connect. */
@@ -1750,46 +1938,41 @@ void MainWindow::sendMails(){
         }
     }
 
-    progress.setText("Confirm...");
+    /* Confirm mails. */
+    progressText.setText("Confirm...");
     qApp->processEvents();
 
     /* Sure? */
-    if(QMessageBox::question(this, tr("Send Emails now?"),
+    if(QMessageBox::question(this, tr("Send emails now?"),
                                    tr("Are you sure you want to send ") +
-                                   QString::number(m_nMailsDisplay->value()) +
-                                   tr(" emails with the ") +
-                                   tr("subject \n\" [") + m_courseCode->text() + tr("] ") + m_emailSubject->text() + tr("\"\n") +
-                                   tr("and ") + QString::number(m_attachments->count()) + tr(" attachments now?")
+                                   QString::number(nMails) +
+                                   tr(" emails with the subject: \"") + subject +
+                                   tr("\" and ") + QString::number(nAttachments) + tr(" attachments now?")
                              ) != QMessageBox::Yes){
         return;
     }
 
+    /* Set progressbar range. */
+    progressBar.setRange(0, nMails);
+
+    /* Statistics. */
     QString success;
     int nSuccess = 0;
     QString failed;
     int nFailed = 0;
     QString allTexts;
 
-    // Show progressbar
-    QProgressBar progressBar(this);
-    progressBar.setMinimum(0);
-    progressBar.setMaximum(nMails);
-    progressBar.setFixedWidth(this->width());
-    progressBar.show();
-
     /* Send messages. */
     for(int i = 0; i < nMails; i++){
-        int index = start + i;
+        int rowIndex = m_previewSelect->itemText(i).toInt();
 
-        progress.setText(tr("Sending message ") + QString::number(i+1) + tr(" / ") + QString::number(nMails) + tr("..."));
-        progressBar.setValue(i+1);
-
+        progressText.setText(tr("Sending message ") + QString::number(i+1) + tr(" / ") + QString::number(nMails) + tr("..."));
+        progressBar.setValue(i);
         qApp->processEvents();
 
         /* Add contents. */
-        // BroJZ: number of message shown instead of index
-        allTexts.append(tr("\n\n============================== " ) + QString::number(i+1) + tr(" ==============================\n"));
-        allTexts.append(getMailHeader(index));
+        allTexts.append(tr("\n\n============================== " ) + QString::number(rowIndex) + tr(" ==============================\n"));
+        allTexts.append(getMailHeader(rowIndex));
         allTexts.append(texts[i].getText());
 
         /* Try to send the mail. If failed, keep track of this. */
@@ -1802,10 +1985,10 @@ void MainWindow::sendMails(){
         success += tr("  ") + messages[i].getRecipients()[0]->getAddress() + tr("\n");
         nSuccess++;
     }
-    progressBar.hide();
 
     /* Prepare report. */
-    progress.setText(tr("Sending Report..."));
+    progressBar.setValue(nMails);
+    progressText.setText(tr("Sending Report..."));
     qApp->processEvents();
 
     QString res = tr("Number of mails: ") + QString::number(nMails) + tr("\n\n") +
@@ -1814,39 +1997,40 @@ void MainWindow::sendMails(){
 
     allTexts.prepend(tr("Beste ") + m_senderName->text() + tr(",\n\n") +
                      tr("Hierbij het rapport van ") + subject + tr("\n\n") +
-                     res + tr("\n"));
+                     res + tr("\nDe volgende berichten zijn gegenereerd:\n"));
     allTexts.append(tr("\n============================== END ==============================\n"));
 
     /* Message and content. */
-    MimeMessage message;
+    MimeMessage report;
     MimeText text;
 
     /* Set sender and receiver. */
-    message.setSender(&sender);
-    message.addRecipient(&sender);
+    report.setSender(&sender);
+    report.addRecipient(&sender);
 
     /* Add cc's */
     foreach(QString cc, report_cc_addresses){
-        message.addCc(new EmailAddress(cc));
+        report.addCc(new EmailAddress(cc));
     }
 
     /* Add subject */
-    message.setSubject(tr("Report: ") + subject);
+    report.setSubject(tr("Report: ") + subject);
 
     /* Add contents. */
     text.setText(allTexts);
-
-    /* Add content to message. */
-    message.addPart(&text);
+    report.addPart(&text);
 
     /* Add attachments. */
     foreach(MimeAttachment *att, attachments){
-        message.addPart(att);
+        report.addPart(att);
     }
 
-    sendMail(&message);
+    if(!sendMail(&report)){
+        QMessageBox::warning(this, tr("Error:"), tr("Sending report failed!"));
+    }
 
-    progress.setText(res);
+    progressText.setText(res);
+    qApp->processEvents();
 
     /* Cleanup attachments. */
     foreach(QFile *f, attachmentFiles){
@@ -1855,8 +2039,6 @@ void MainWindow::sendMails(){
     foreach(MimeAttachment *att, attachments){
         delete att;
     }
-
-    qDebug() << allTexts << endl;
 
     /* Give information. */
     QMessageBox::information(this, tr("Info:"), res);
