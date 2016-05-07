@@ -21,6 +21,8 @@
 #include <QRegExp>
 #include <QStringRef>
 
+#include <QProgressBar>
+
 #include <mimetext.h>
 #include <mimeattachment.h>
 
@@ -1962,6 +1964,13 @@ void MainWindow::sendMails(){
     int nFailed = 0;
     QString allTexts;
 
+    // Show progressbar
+    QProgressBar progressBar(this);
+    progressBar.setMinimum(0);
+    progressBar.setMaximum(nMails);
+    progressBar.setFixedWidth(this->width());
+    progressBar.show();
+
     /* Send messages. */
     for(int i = 0; i < nMails; i++){
         int rowIndex = m_previewSelect->itemText(i).toInt();
@@ -1984,8 +1993,8 @@ void MainWindow::sendMails(){
 
         success += tr("  ") + messages[i].getRecipients()[0]->getAddress() + tr("\n");
         nSuccess++;
-
     }
+    progressBar.hide();
 
     /* Prepare report. */
     progressBar.setValue(nMails);
