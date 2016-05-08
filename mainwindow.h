@@ -53,9 +53,10 @@ private slots:
     void closeEvent(QCloseEvent *closeEvent);
 
     /* [4] Show/hide widgets. */
-    void toggleSettingsWidget(bool b);
-    void toggleSMTPWidget(bool b);
+    void toggleSettingsWidget(bool s);
+    void toggleSMTPWidget(bool s);
     void toggleGenerateWidget(bool s);
+    void toggleMailSelectWidget(bool s);
     void toggleAttachmentWidget(bool s);
 
     /*
@@ -213,7 +214,9 @@ private:
 
     /* Selection and Preview. */
     QTextEdit *m_previewText;
-    QFrame *m_rowSelectWidget;
+    QFrame *m_mailSelectWidget;
+    QPropertyAnimation *m_toggleMailSelectAnimation;
+    QPushButton *m_mailSelectWidgetToggleButton;
     QComboBox *m_emailColumnSelect;
     QLineEdit *m_emailAppendText;
     QComboBox *m_firstRowSelect;

@@ -47,17 +47,21 @@ MainWindow::MainWindow(QWidget *parent) :
     createXlsxViewerWidget();
     createToolBar();
 
-    /* Add Dockwidgets and toolbar. */
-    this->addDockWidget(Qt::TopDockWidgetArea, m_generalOptionsDW);
-    this->addDockWidget(Qt::LeftDockWidgetArea, m_editorDW);
-    this->addDockWidget(Qt::RightDockWidgetArea, m_previewDW);
-    this->addDockWidget(Qt::BottomDockWidgetArea, m_xlsxViewerDW);
-    this->addToolBar(Qt::BottomToolBarArea, m_toolBar);
-
     /* Having no central widget gives problems in layout. */
     QWidget *cw = new QWidget(this);
     cw->setFixedSize(0, 0);
     setCentralWidget(cw);
+
+    /* Add Dockwidgets and toolbar. */
+    this->addDockWidget(Qt::TopDockWidgetArea, m_generalOptionsDW);
+    this->addDockWidget(Qt::TopDockWidgetArea, m_editorDW);
+    this->addDockWidget(Qt::TopDockWidgetArea, m_previewDW);
+    this->addDockWidget(Qt::TopDockWidgetArea, m_xlsxViewerDW);
+    this->addToolBar(Qt::BottomToolBarArea, m_toolBar);
+
+    splitDockWidget(m_generalOptionsDW, m_xlsxViewerDW, Qt::Vertical);
+    splitDockWidget(m_generalOptionsDW, m_editorDW, Qt::Vertical);
+    splitDockWidget(m_editorDW, m_previewDW, Qt::Horizontal);
 
     /* Set default values. */
     loadSettings();
@@ -82,9 +86,9 @@ MainWindow::~MainWindow(){
 void MainWindow::createGeneralOptionsWidget(){
 
     m_generalOptionsDW = new QDockWidget(tr("General parameters"), this);
-    m_generalOptionsDW->setFixedHeight(175);
 
     QFrame *generalOptionsWidget = new QFrame(m_generalOptionsDW);
+    generalOptionsWidget->setFixedHeight(140);
     generalOptionsWidget->setFrameShape(QFrame::StyledPanel);
 
     QGridLayout *generalOptionsLayout = new QGridLayout(generalOptionsWidget);
@@ -209,21 +213,25 @@ void MainWindow::createSettingsWidget(){
     settingsLayout->setContentsMargins(m);
 
     m_runtimeValidate = new QCheckBox(tr("Direct Validation"), m_settingsWidget);
-    m_runtimeValidate->setToolTip(tr("Color boxes and buttons red when they have invalid content as you type."));
+    m_runtimeValidate->setToolTip(tr("Color boxes and buttons red when they\n"
+                                     "have invalid content as you type."));
     m_runtimeValidate->setChecked(true);
     connect(m_runtimeValidate, SIGNAL(stateChanged(int)), this, SLOT(updateText()));
     m_validateHR = new QCheckBox(tr("Validate for HR"), m_settingsWidget);
-    m_validateHR->setToolTip(tr("Validate student email addresses ([7 digits]@hr.nl) and employee code ([5 characters]@hr.nl) for use at the Hogeschool Rotterdam."));
+    m_validateHR->setToolTip(tr("Validate student email addresses ([7 digits]@hr.nl)\n"
+                                "and employee code ([5 characters]@hr.nl)\n"
+                                "for use at the Hogeschool Rotterdam."));
     m_validateHR->setChecked(true);
     m_saveOnExitCheckBox = new QCheckBox(tr("Ask to save on exit"), m_settingsWidget);
-    m_saveOnExitCheckBox->setToolTip(tr("Ask before saving text tabs and general parameters on exit. When not checked, these values are automatically saved."));
+    m_saveOnExitCheckBox->setToolTip(tr("Ask before saving text tabs and general\n"
+                                        "parameters on exit. When not checked,\n"
+                                        "these values are automatically saved."));
     m_saveOnExitCheckBox->setChecked(false);
 
     m_toggleSettingsAnimation = new QPropertyAnimation(m_settingsWidget, "maximumWidth");
     m_toggleSettingsAnimation->setDuration(500);
     m_settingsWidgetToggleButton = new QPushButton(tr("<"), m_generalOptionsDW);
-    m_settingsWidgetToggleButton->setMaximumWidth(20);
-    m_settingsWidgetToggleButton->setMinimumWidth(20);
+    m_settingsWidgetToggleButton->setFixedWidth(20);
     m_settingsWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
     connect(m_settingsWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleSettingsWidget(bool)));
     connect(m_toggleSettingsAnimation, SIGNAL(finished()), this, SLOT(repaint()));
@@ -233,7 +241,8 @@ void MainWindow::createSettingsWidget(){
 
     /* Clear settings button. */
     QPushButton *clearSettingsButton = new QPushButton(tr("Clear Saved Settings"), m_settingsWidget);
-    clearSettingsButton->setToolTip(tr("Reset all saved and edited settings.\nThe application will be as new."));
+    clearSettingsButton->setToolTip(tr("Reset all saved and edited settings.\n"
+                                       "The application will be as new."));
     connect(clearSettingsButton, SIGNAL(clicked()), this, SLOT(deleteSettings()));
 
     /* Save settings button. */
@@ -279,8 +288,7 @@ void MainWindow::createSMTPWidget(){
     m_toggleSMTPAnimation = new QPropertyAnimation(m_SMTPWidget, "maximumWidth");
     m_toggleSMTPAnimation->setDuration(500);
     m_SMTPWidgetToggleButton = new QPushButton(tr("<"), m_generalOptionsDW);
-    m_SMTPWidgetToggleButton->setMaximumWidth(20);
-    m_SMTPWidgetToggleButton->setMinimumWidth(20);
+    m_SMTPWidgetToggleButton->setFixedWidth(20);
     m_SMTPWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
     connect(m_SMTPWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleSMTPWidget(bool)));
     connect(m_toggleSMTPAnimation, SIGNAL(finished()), this, SLOT(repaint()));
@@ -304,14 +312,19 @@ void MainWindow::createEditorWidget(){
 
     /* Create Dockwidget for the editor. */
     m_editorDW = new QDockWidget(tr("Edit:"), this);
-    m_editorDW->setMinimumHeight(375);
 
     /* Create main widget. */
     QFrame *editorWidget = new QFrame(m_editorDW);
+    editorWidget->setMinimumHeight(325);
+    editorWidget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
     editorWidget->setFrameShape(QFrame::StyledPanel);
 
     /* Create Layout. */
     QHBoxLayout *editorWidgetLayout = new QHBoxLayout(editorWidget);
+    QMargins m = editorWidgetLayout->contentsMargins();
+    m.setRight(0);
+    editorWidgetLayout->setContentsMargins(m);
+
 
     /* Create tabwidget to contain editors. */
     m_textTab = new QTabWidget(editorWidget);
@@ -355,36 +368,40 @@ void MainWindow::createGenerateWidget(){
 
     /* Create a frame for this widget. */
     m_generateWidget = new QFrame(m_editorDW);
-    m_generateWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
+    m_generateWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::MinimumExpanding);
 
     /* Create Layout. */
     QGridLayout *generateWidgetLayout = new QGridLayout(m_generateWidget);
-    generateWidgetLayout->setContentsMargins(0, 0, 0, 0);
+    QMargins m = generateWidgetLayout->contentsMargins();
+    m.setTop(0);
+    m.setBottom(0);
+    m.setLeft(0);
+    generateWidgetLayout->setContentsMargins(m);
 
     /* Create Widgets */
     m_nameColSelect = new QComboBox(m_generateWidget);
     m_nameColSelect->setToolTip(tr("The column to use for the name of the recipient.\n"
-                             "Select <none> if you do not want to include this."));
+                                   "Select <none> if you do not want to include this."));
     m_finalGradeColSelect = new QComboBox(m_generateWidget);
     m_finalGradeColSelect->setToolTip(tr("The column to use for the final grade.\n"
-                              "Select <none> if you do not want to include this."));
+                                          "Select <none> if you do not want to include this."));
     m_startColSelect = new QComboBox(m_generateWidget);
     m_startColSelect->setToolTip(tr("We can include a selection of columns to include.\n"
-                              "Specify the column to start with here.\n"
-                              "Select <none> if you do not want to include this."));
+                                    "Specify the column to start with here.\n"
+                                    "Select <none> if you do not want to include this."));
     m_stopColSelect = new QComboBox(m_generateWidget);
     m_stopColSelect->setToolTip(tr("We can include a selection of columns to include.\n"
-                             "Specify the column to end with here.\n"
-                             "Select <none> if you do not want to include this."));
+                                   "Specify the column to end with here.\n"
+                                   "Select <none> if you do not want to include this."));
     m_maxRowSelect = new QComboBox(m_generateWidget);
     m_maxRowSelect->setToolTip(tr("We can include the maximum score or default value for\n"
-                            "the columns you have selected.\n"
-                            "Specify the row to use for this here.\n"
-                            "Select <none> if you do not want to include this."));
+                                  "the columns you have selected.\n"
+                                  "Specify the row to use for this here.\n"
+                                  "Select <none> if you do not want to include this."));
     m_headerRowSelect = new QComboBox(m_generateWidget);
     m_headerRowSelect->setToolTip(tr("We can include names for the columns you have selected.\n"
-                             "Specify the row to use for this here.\n"
-                             "Select <none> if you do not want to include this."));
+                                     "Specify the row to use for this here.\n"
+                                     "Select <none> if you do not want to include this."));
 
     /* Button to create text in current tab. */
     QPushButton *replaceButton = new QPushButton(tr("Current Tab"), m_generateWidget);
@@ -402,8 +419,7 @@ void MainWindow::createGenerateWidget(){
 
     /* Button to show/hide this widget. */
     m_generateWidgetToggleButton = new QPushButton(tr("<"), m_editorDW);
-    m_generateWidgetToggleButton->setMinimumWidth(20);
-    m_generateWidgetToggleButton->setMaximumWidth(20);
+    m_generateWidgetToggleButton->setFixedWidth(20);
     m_generateWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
     m_generateWidgetToggleButton->setCheckable(true);
     connect(m_generateWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleGenerateWidget(bool)));
@@ -442,15 +458,19 @@ void MainWindow::createPreviewWidget(){
 
     /* Create the dockwidget. */
     m_previewDW = new QDockWidget(tr("Selection and preview:"), this);
-    m_previewDW->setMinimumHeight(375);
 
     /* Create a (main)frame for this widget. */
     QFrame *previewWidget = new QFrame(m_previewDW);
+    previewWidget->setMinimumHeight(325);
+    previewWidget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
     previewWidget->setFrameShape(QFrame::StyledPanel);
 
     /* Create main layout. */
-    QHBoxLayout *previewWidgetLayout = new QHBoxLayout();
+    QHBoxLayout *previewWidgetLayout = new QHBoxLayout(previewWidget);
     previewWidgetLayout->setAlignment(Qt::AlignTop);
+    QMargins m = previewWidgetLayout->contentsMargins();
+    m.setLeft(0);
+    previewWidgetLayout->setContentsMargins(m);
 
     /* Create layouts. */
     QVBoxLayout *previewBoxLayout = new QVBoxLayout();
@@ -461,7 +481,8 @@ void MainWindow::createPreviewWidget(){
     m_nMailsDisplay->setFrameStyle(QFrame::NoFrame);
     m_nMailsDisplay->setSegmentStyle(QLCDNumber::Filled);
     m_nMailsDisplay->setPalette(QPalette(Qt::red));
-    m_nMailsDisplay->setToolTip(tr("This is the number of emails\nthat this program will send."));
+    m_nMailsDisplay->setToolTip(tr("This is the number of emails\n"
+                                   "that this program will send."));
 
     /* Selection for the row (email) to preview. */
     m_previewSelect = new QComboBox(m_previewDW);
@@ -471,7 +492,7 @@ void MainWindow::createPreviewWidget(){
     /* The preview tool itself is a read-only textbox. */
     m_previewText = new QTextEdit(m_previewDW);
     m_previewText->setToolTip(tr("This is how the email looks as it will be send.\n"
-                          "You can select an other email in the selection box above."));
+                                 "You can select an other email in the selection box above."));
     m_previewText->setReadOnly(true);
 
     /*
@@ -481,7 +502,7 @@ void MainWindow::createPreviewWidget(){
     createMailSelectWidget();
 
     /* The button to send the mails. */
-    QPushButton *sendMailsButton = new QPushButton(tr("Send mails"), m_rowSelectWidget);
+    QPushButton *sendMailsButton = new QPushButton(tr("Send mails"), m_mailSelectWidget);
     sendMailsButton->setToolTip(tr("Pressing this button will check if everything is OK.\n\n"
                                    "If not OK, it will display an error message.\n\n"
                                    "If OK, it will connect to the SMTP server if there \n"
@@ -498,7 +519,8 @@ void MainWindow::createPreviewWidget(){
     previewBoxLayout->addWidget(m_previewText);
     previewBoxLayout->addWidget(sendMailsButton);
 
-    previewWidgetLayout->addWidget(m_rowSelectWidget);
+    previewWidgetLayout->addWidget(m_mailSelectWidget);
+    previewWidgetLayout->addWidget(m_mailSelectWidgetToggleButton);
     previewWidgetLayout->addLayout(previewBoxLayout);
 
     /* Set layout to main widget. */
@@ -513,24 +535,30 @@ void MainWindow::createPreviewWidget(){
 void MainWindow::createMailSelectWidget(){
 
     /* Create Frame. */
-    m_rowSelectWidget = new QFrame(m_previewDW);
-    m_rowSelectWidget->setFixedWidth(180);
-    m_rowSelectWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
+    m_mailSelectWidget = new QFrame(m_previewDW);
+    //m_mailSelectWidget->setFixedWidth(180);
+    m_mailSelectWidget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::MinimumExpanding);
 
     /* Create layout. */
-    QGridLayout *rowSelectLayout = new QGridLayout(m_rowSelectWidget);
-    rowSelectLayout->setContentsMargins(0, 0, 0, 0);
+    QGridLayout *mailSelectLayout = new QGridLayout(m_mailSelectWidget);
+    QMargins m = mailSelectLayout->contentsMargins();
+    m.setRight(0);
+    m.setBottom(0);
+    m.setTop(0);
+    mailSelectLayout->setContentsMargins(m);
 
     /* Create row selection. */
-    m_firstRowSelect = new QComboBox(m_rowSelectWidget);
-    m_firstRowSelect->setToolTip(tr("Select the row where the first email\nshould be generated from."));
-    m_lastRowSelect = new QComboBox(m_rowSelectWidget);
-    m_lastRowSelect->setToolTip(tr("Select the row where the last email\nshould be generated from."));
+    m_firstRowSelect = new QComboBox(m_mailSelectWidget);
+    m_firstRowSelect->setToolTip(tr("Select the row where the first email\n"
+                                    "should be generated from."));
+    m_lastRowSelect = new QComboBox(m_mailSelectWidget);
+    m_lastRowSelect->setToolTip(tr("Select the row where the last email\n"
+                                   "should be generated from."));
     connect(m_firstRowSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateInfo()));
     connect(m_lastRowSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateInfo()));
 
     /* Select the column where the email addresses are in. */
-    m_emailColumnSelect = new QComboBox(m_rowSelectWidget);
+    m_emailColumnSelect = new QComboBox(m_mailSelectWidget);
     m_emailColumnSelect->setToolTip(tr("Select the column for the\nemail address to use.\n\n"
                                        "Note: this column in the spreadhseet\nshould be marked as text,\n"
                                        "not as a number.\n\n"
@@ -538,39 +566,51 @@ void MainWindow::createMailSelectWidget(){
     connect(m_emailColumnSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateText()));
 
     /* Option to append a value to the addresses in the spreadsheet. */
-    m_emailAppendText = new QLineEdit(tr("@hr.nl"), m_rowSelectWidget);
+    m_emailAppendText = new QLineEdit(tr("@hr.nl"), m_mailSelectWidget);
     m_emailAppendText->setToolTip(tr("Add a value that should be appended to\n"
                                      "the column where the email address is in.\n\n"
                                      "If this column already contains a complete\n"
                                      "email address, this field should be empty."));
     connect(m_emailAppendText, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
 
+    /* Define animation for adjusting the maximumWidth of the widget. */
+    m_toggleMailSelectAnimation = new QPropertyAnimation(m_mailSelectWidget, "maximumWidth");
+    m_toggleMailSelectAnimation->setDuration(500);
 
+    /* Button to show/hide this widget. */
+    m_mailSelectWidgetToggleButton = new QPushButton(tr("<"), m_editorDW);
+    m_mailSelectWidgetToggleButton->setFixedWidth(20);
+    m_mailSelectWidgetToggleButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
+    m_mailSelectWidgetToggleButton->setCheckable(true);
+    connect(m_mailSelectWidgetToggleButton, SIGNAL(toggled(bool)), this, SLOT(toggleMailSelectWidget(bool)));
+    connect(m_toggleMailSelectAnimation, SIGNAL(finished()), this, SLOT(repaint()));
+    m_mailSelectWidgetToggleButton->setChecked(true);
 
     /* Create Attachment Widget. */
     createAttachmentWidget();
 
-    QFrame *line1 = new QFrame(m_rowSelectWidget);
+    QFrame *line1 = new QFrame(m_mailSelectWidget);
     line1->setFrameShape(QFrame::HLine);
     line1->setFrameShadow(QFrame::Sunken);
 
     /* Add to layout. */
-    rowSelectLayout->addWidget(new QLabel(tr("Mail range and address:"), m_rowSelectWidget), 0, 0, 1, 2);
-    rowSelectLayout->addWidget(new QLabel(tr("First [row]:"), m_rowSelectWidget), 1, 0);
-    rowSelectLayout->addWidget(m_firstRowSelect, 1, 1);
-    rowSelectLayout->addWidget(new QLabel(tr("Last [row]:"), m_rowSelectWidget), 2, 0);
-    rowSelectLayout->addWidget(m_lastRowSelect, 2, 1);
-    rowSelectLayout->addWidget(new QLabel(tr("Email [col]:"), m_rowSelectWidget), 3, 0);
-    rowSelectLayout->addWidget(m_emailColumnSelect, 3, 1);
-    rowSelectLayout->addWidget(new QLabel(tr("and append:"), m_rowSelectWidget), 4, 0);
-    rowSelectLayout->addWidget(m_emailAppendText, 4, 1);
-    rowSelectLayout->addWidget(line1, 5, 0, 1, 2);
-    rowSelectLayout->setRowStretch(6, 40);
-    rowSelectLayout->addWidget(m_attachmentWidgetToggleButton, 7, 0, 1, 2);
-    rowSelectLayout->addWidget(m_attachmentWidget, 8, 0, 1, 2);
+    mailSelectLayout->addWidget(new QLabel(tr("Mail range and address:"), m_mailSelectWidget), 0, 0, 1, 2);
+    mailSelectLayout->addWidget(new QLabel(tr("First [row]:"), m_mailSelectWidget), 1, 0);
+    mailSelectLayout->addWidget(m_firstRowSelect, 1, 1);
+    mailSelectLayout->addWidget(new QLabel(tr("Last [row]:"), m_mailSelectWidget), 2, 0);
+    mailSelectLayout->addWidget(m_lastRowSelect, 2, 1);
+    mailSelectLayout->addWidget(new QLabel(tr("Email [col]:"), m_mailSelectWidget), 3, 0);
+    mailSelectLayout->addWidget(m_emailColumnSelect, 3, 1);
+    mailSelectLayout->addWidget(new QLabel(tr("and append:"), m_mailSelectWidget), 4, 0);
+    mailSelectLayout->addWidget(m_emailAppendText, 4, 1);
+    mailSelectLayout->addWidget(line1, 5, 0, 1, 2);
+    mailSelectLayout->setRowStretch(6, 40);
+    mailSelectLayout->addWidget(m_attachmentWidgetToggleButton, 7, 0, 1, 2);
+    mailSelectLayout->addWidget(m_attachmentWidget, 8, 0, 1, 2);
+    mailSelectLayout->setRowMinimumHeight(8, 0);
 
     /* Set layout. */
-    m_rowSelectWidget->setLayout(rowSelectLayout);
+    m_mailSelectWidget->setLayout(mailSelectLayout);
 
 }
 
@@ -578,7 +618,6 @@ void MainWindow::createAttachmentWidget(){
 
     /* Create a frame for this widget. */
     m_attachmentWidget = new QFrame(m_previewDW);
-    m_attachmentWidget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
 
     QGridLayout *attachmentWidgetLayout = new QGridLayout(m_attachmentWidget);
     attachmentWidgetLayout->setContentsMargins(0, 0, 0, 0);
@@ -628,14 +667,14 @@ void MainWindow::createXlsxViewerWidget(){
 
     /* Create the dockwidget that uses all of the available (remaining) space. */
     m_xlsxViewerDW = new QDockWidget(tr("XLSX Viewer:"), this);
-    m_xlsxViewerDW->setMinimumHeight(200);
-    m_xlsxViewerDW->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
 
     /* Create a frame for this widget that uses all of the available (remaining) space. */
     QFrame *xlsxWidget = new QFrame(m_xlsxViewerDW);
+    xlsxWidget->setMinimumHeight(125);
+    xlsxWidget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::MinimumExpanding);
     xlsxWidget->setFrameShape(QFrame::StyledPanel);
 
-    QVBoxLayout *xlsxWidgetLayout = new QVBoxLayout();
+    QVBoxLayout *xlsxWidgetLayout = new QVBoxLayout(xlsxWidget);
 
     /* Add the tabwidget where the tabs from the xlsx file can be loaded. */
     m_xlsxTab = new QTabWidget(m_xlsxViewerDW);
@@ -672,7 +711,7 @@ void MainWindow::createXlsxViewerWidget(){
 /* Create Toolbar */
 void MainWindow::createToolBar(){
 
-    m_toolBar = new QToolBar(this);
+    m_toolBar = new QToolBar(tr("Information Bar"), this);
     m_toolBar->setMovable(false);
 
     /* Infobar */
@@ -1069,17 +1108,17 @@ void MainWindow::toggleSettingsWidget(bool s){
 
     if(!s){
         /* Hide */
-        m_toggleSettingsAnimation->setStartValue(400);
+        m_toggleSettingsAnimation->setStartValue(350);
         m_toggleSettingsAnimation->setEndValue(0);
         m_settingsWidgetToggleButton->setText(tr(">"));
-        m_settingsWidgetToggleButton->setToolTip(tr("Show settings"));
+        m_settingsWidgetToggleButton->setToolTip(tr("Show settings."));
     }
     else{
         /* Show. */
         m_toggleSettingsAnimation->setStartValue(0);
-        m_toggleSettingsAnimation->setEndValue(400);
+        m_toggleSettingsAnimation->setEndValue(350);
         m_settingsWidgetToggleButton->setText(tr("<"));
-        m_settingsWidgetToggleButton->setToolTip(tr("Hide settings"));
+        m_settingsWidgetToggleButton->setToolTip(tr("Hide settings."));
     }
 
     m_toggleSettingsAnimation->start();
@@ -1091,17 +1130,17 @@ void MainWindow::toggleSMTPWidget(bool s){
 
     if(!s){
         /* Hide */
-        m_toggleSMTPAnimation->setStartValue(400);
+        m_toggleSMTPAnimation->setStartValue(225);
         m_toggleSMTPAnimation->setEndValue(0);
         m_SMTPWidgetToggleButton->setText(tr("<"));
-        m_SMTPWidgetToggleButton->setToolTip(tr("Show SMTP options"));
+        m_SMTPWidgetToggleButton->setToolTip(tr("Show SMTP options."));
     }
     else{
         /* Show. */
         m_toggleSMTPAnimation->setStartValue(0);
-        m_toggleSMTPAnimation->setEndValue(400);
+        m_toggleSMTPAnimation->setEndValue(225);
         m_SMTPWidgetToggleButton->setText(tr(">"));
-        m_SMTPWidgetToggleButton->setToolTip(tr("Hide SMTP options"));
+        m_SMTPWidgetToggleButton->setToolTip(tr("Hide SMTP options."));
     }
 
     m_toggleSMTPAnimation->start();
@@ -1113,17 +1152,17 @@ void MainWindow::toggleGenerateWidget(bool s){
 
     if(!s){
         /* Hide. */
-        m_toggleGenerateAnimation->setStartValue(400);
+        m_toggleGenerateAnimation->setStartValue(235);
         m_toggleGenerateAnimation->setEndValue(0);
         m_generateWidgetToggleButton->setText(tr("<"));
-        m_generateWidgetToggleButton->setToolTip(tr("Show options"));
+        m_generateWidgetToggleButton->setToolTip(tr("Show text generation options."));
     }
     else{
         /* Show. */
         m_toggleGenerateAnimation->setStartValue(0);
-        m_toggleGenerateAnimation->setEndValue(400);
+        m_toggleGenerateAnimation->setEndValue(235);
         m_generateWidgetToggleButton->setText(tr(">"));
-        m_generateWidgetToggleButton->setToolTip(tr("Hide options"));
+        m_generateWidgetToggleButton->setToolTip(tr("Hide text generation options."));
     }
 
     /* Start animation. */
@@ -1131,7 +1170,30 @@ void MainWindow::toggleGenerateWidget(bool s){
 
 }
 
-/* Show/hide the generateWidget. */
+/* Show/hide the mailSelectWidget. */
+void MainWindow::toggleMailSelectWidget(bool s){
+
+    if(!s){
+        /* Hide. */
+        m_toggleMailSelectAnimation->setStartValue(175);
+        m_toggleMailSelectAnimation->setEndValue(0);
+        m_mailSelectWidgetToggleButton->setText(tr(">"));
+        m_mailSelectWidgetToggleButton->setToolTip(tr("Show text generation options."));
+    }
+    else{
+        /* Show. */
+        m_toggleMailSelectAnimation->setStartValue(0);
+        m_toggleMailSelectAnimation->setEndValue(175);
+        m_mailSelectWidgetToggleButton->setText(tr("<"));
+        m_mailSelectWidgetToggleButton->setToolTip(tr("Hide text generation options."));
+    }
+
+    /* Start animation. */
+    m_toggleMailSelectAnimation->start();
+
+}
+
+/* Show/hide the attachmentWidget. */
 void MainWindow::toggleAttachmentWidget(bool s){
 
     if(!s){
