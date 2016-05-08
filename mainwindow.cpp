@@ -480,12 +480,23 @@ void MainWindow::createPreviewWidget(){
      */
     createMailSelectWidget();
 
+    /* The button to send the mails. */
+    QPushButton *sendMailsButton = new QPushButton(tr("Send mails"), m_rowSelectWidget);
+    sendMailsButton->setToolTip(tr("Pressing this button will check if everything is OK.\n\n"
+                                   "If not OK, it will display an error message.\n\n"
+                                   "If OK, it will connect to the SMTP server if there \n"
+                                   "is no connection yet and tries to send the e-mails.\n\n"
+                                   "Finally, a message will be displayed with the result."));
+    connect(sendMailsButton, SIGNAL(clicked()), this, SLOT(sendMails()));
+
     /* Set it all in the layouts. */
     previewSelectionLayout->addWidget(new QLabel(tr("Preview:"), m_previewDW));
     previewSelectionLayout->addWidget(m_previewSelect);
+    previewSelectionLayout->addStretch(2);
     previewSelectionLayout->addWidget(m_nMailsDisplay);
     previewBoxLayout->addLayout(previewSelectionLayout);
     previewBoxLayout->addWidget(m_previewText);
+    previewBoxLayout->addWidget(sendMailsButton);
 
     previewWidgetLayout->addWidget(m_rowSelectWidget);
     previewWidgetLayout->addLayout(previewBoxLayout);
@@ -502,12 +513,12 @@ void MainWindow::createPreviewWidget(){
 void MainWindow::createMailSelectWidget(){
 
     /* Create Frame. */
-    m_rowSelectWidget = new QFrame(this);
-    m_rowSelectWidget->setFixedWidth(150);
+    m_rowSelectWidget = new QFrame(m_previewDW);
+    m_rowSelectWidget->setFixedWidth(180);
     m_rowSelectWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::MinimumExpanding);
 
     /* Create layout. */
-    QVBoxLayout *rowSelectLayout = new QVBoxLayout(m_rowSelectWidget);
+    QGridLayout *rowSelectLayout = new QGridLayout(m_rowSelectWidget);
     rowSelectLayout->setContentsMargins(0, 0, 0, 0);
 
     /* Create row selection. */
@@ -520,44 +531,43 @@ void MainWindow::createMailSelectWidget(){
 
     /* Select the column where the email addresses are in. */
     m_emailColumnSelect = new QComboBox(m_rowSelectWidget);
-    m_emailColumnSelect->setToolTip(tr("Select the column for the\nemail address to use.\n"
+    m_emailColumnSelect->setToolTip(tr("Select the column for the\nemail address to use.\n\n"
                                        "Note: this column in the spreadhseet\nshould be marked as text,\n"
-                                       "not as a number."));
+                                       "not as a number.\n\n"
+                                       "Rows where this column is empty will be ignored."));
     connect(m_emailColumnSelect, SIGNAL(currentTextChanged(QString)), this, SLOT(updateText()));
 
     /* Option to append a value to the addresses in the spreadsheet. */
     m_emailAppendText = new QLineEdit(tr("@hr.nl"), m_rowSelectWidget);
     m_emailAppendText->setToolTip(tr("Add a value that should be appended to\n"
-                                     "the column where the email address is in.\n"
+                                     "the column where the email address is in.\n\n"
                                      "If this column already contains a complete\n"
                                      "email address, this field should be empty."));
     connect(m_emailAppendText, SIGNAL(textChanged(QString)), this, SLOT(updateText()));
 
-    /* The button to send the mails. */
-    QPushButton *sendMailsButton = new QPushButton(tr("Send mails"), m_rowSelectWidget);
-    sendMailsButton->setToolTip(tr("Pressing this button will check if everything is OK.\n\n"
-                                   "If not OK, it will display an error message.\n\n"
-                                   "If OK, it will connect to the SMTP server if there \n"
-                                   "is no connection yet and tries to send the e-mails.\n\n"
-                                   "Finally, a message will be displayed with the result."));
-    connect(sendMailsButton, SIGNAL(clicked()), this, SLOT(sendMails()));
+
 
     /* Create Attachment Widget. */
     createAttachmentWidget();
 
+    QFrame *line1 = new QFrame(m_rowSelectWidget);
+    line1->setFrameShape(QFrame::HLine);
+    line1->setFrameShadow(QFrame::Sunken);
+
     /* Add to layout. */
-    rowSelectLayout->addWidget(new QLabel(tr("First mail [row]:"), m_rowSelectWidget));
-    rowSelectLayout->addWidget(m_firstRowSelect);
-    rowSelectLayout->addWidget(new QLabel(tr("Last mail [row]:"), m_rowSelectWidget));
-    rowSelectLayout->addWidget(m_lastRowSelect);
-    rowSelectLayout->addWidget(new QLabel(tr("Email address [col]:"), m_rowSelectWidget));
-    rowSelectLayout->addWidget(m_emailColumnSelect);
-    rowSelectLayout->addWidget(new QLabel(tr("and append:"), m_rowSelectWidget));
-    rowSelectLayout->addWidget(m_emailAppendText);
-    rowSelectLayout->addSpacerItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding));
-    rowSelectLayout->addWidget(m_attachmentWidgetToggleButton);
-    rowSelectLayout->addWidget(m_attachmentWidget);
-    rowSelectLayout->addWidget(sendMailsButton);
+    rowSelectLayout->addWidget(new QLabel(tr("Mail range and address:"), m_rowSelectWidget), 0, 0, 1, 2);
+    rowSelectLayout->addWidget(new QLabel(tr("First [row]:"), m_rowSelectWidget), 1, 0);
+    rowSelectLayout->addWidget(m_firstRowSelect, 1, 1);
+    rowSelectLayout->addWidget(new QLabel(tr("Last [row]:"), m_rowSelectWidget), 2, 0);
+    rowSelectLayout->addWidget(m_lastRowSelect, 2, 1);
+    rowSelectLayout->addWidget(new QLabel(tr("Email [col]:"), m_rowSelectWidget), 3, 0);
+    rowSelectLayout->addWidget(m_emailColumnSelect, 3, 1);
+    rowSelectLayout->addWidget(new QLabel(tr("and append:"), m_rowSelectWidget), 4, 0);
+    rowSelectLayout->addWidget(m_emailAppendText, 4, 1);
+    rowSelectLayout->addWidget(line1, 5, 0, 1, 2);
+    rowSelectLayout->setRowStretch(6, 40);
+    rowSelectLayout->addWidget(m_attachmentWidgetToggleButton, 7, 0, 1, 2);
+    rowSelectLayout->addWidget(m_attachmentWidget, 8, 0, 1, 2);
 
     /* Set layout. */
     m_rowSelectWidget->setLayout(rowSelectLayout);
@@ -570,7 +580,7 @@ void MainWindow::createAttachmentWidget(){
     m_attachmentWidget = new QFrame(m_previewDW);
     m_attachmentWidget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
 
-    QVBoxLayout *attachmentWidgetLayout = new QVBoxLayout(m_attachmentWidget);
+    QGridLayout *attachmentWidgetLayout = new QGridLayout(m_attachmentWidget);
     attachmentWidgetLayout->setContentsMargins(0, 0, 0, 0);
 
     /* Define animation for adjusting the maximumHeight of the widget. */
@@ -588,7 +598,7 @@ void MainWindow::createAttachmentWidget(){
     m_attachmentWidgetToggleButton->setChecked(true);
     m_attachmentWidgetToggleButton->setChecked(false);
 
-    m_selectAttachmentDirectoryButton = new QPushButton(tr("Select Directory"), m_attachmentWidget);
+    m_selectAttachmentDirectoryButton = new QPushButton(tr("Choose..."), m_attachmentWidget);
     m_selectAttachmentDirectoryButton->setToolTip(tr("Select the directory where the\n"
                                                      "individual attachments are located."));
     connect(m_selectAttachmentDirectoryButton, SIGNAL(clicked()), this, SLOT(selectAttachmentDirectory()));
@@ -602,9 +612,13 @@ void MainWindow::createAttachmentWidget(){
     m_attachmentAppend->setToolTip(tr("Text or extension to add to the filename."));
     connect(m_attachmentAppend, SIGNAL(textChanged(QString)), this, SLOT(updateInfo()));
 
-    attachmentWidgetLayout->addWidget(m_selectAttachmentDirectoryButton);
-    attachmentWidgetLayout->addWidget(m_attachmentColSelect);
-    attachmentWidgetLayout->addWidget(m_attachmentAppend);
+    attachmentWidgetLayout->addWidget(new QLabel(tr("Individual attachment:"), m_attachmentWidget), 0, 0, 1, 2);
+    attachmentWidgetLayout->addWidget(new QLabel(tr("Directory:"), m_attachmentWidget), 1, 0);
+    attachmentWidgetLayout->addWidget(m_selectAttachmentDirectoryButton, 1, 1);
+    attachmentWidgetLayout->addWidget(new QLabel(tr("File [col]:"), m_attachmentWidget), 2, 0);
+    attachmentWidgetLayout->addWidget(m_attachmentColSelect, 2, 1);
+    attachmentWidgetLayout->addWidget(new QLabel(tr("Extension:"), m_attachmentWidget), 3, 0);
+    attachmentWidgetLayout->addWidget(m_attachmentAppend, 3, 1);
 
     m_attachmentWidget->setLayout(attachmentWidgetLayout);
 }
@@ -1122,7 +1136,7 @@ void MainWindow::toggleAttachmentWidget(bool s){
 
     if(!s){
         /* Hide. */
-        m_toggleAttachmentAnimation->setStartValue(100);
+        m_toggleAttachmentAnimation->setStartValue(120);
         m_toggleAttachmentAnimation->setEndValue(0);
         m_attachmentWidgetToggleButton->setText(tr("^"));
         m_attachmentWidgetToggleButton->setToolTip(tr("Show individual attachment options."));
@@ -1130,7 +1144,7 @@ void MainWindow::toggleAttachmentWidget(bool s){
     else{
         /* Show. */
         m_toggleAttachmentAnimation->setStartValue(0);
-        m_toggleAttachmentAnimation->setEndValue(100);
+        m_toggleAttachmentAnimation->setEndValue(120);
         m_attachmentWidgetToggleButton->setText(tr("v"));
         m_attachmentWidgetToggleButton->setToolTip(tr("Hide individual attachment options."));
     }
